@@ -3,6 +3,6 @@
   "_2": "supabaseUrl  = Project URL. Короткий адрес вида https://xxxxxxxx.supabase.co",
   "_3": "supabaseAnonKey = ключ anon public. Длинная строка, обычно начинается с eyJ",
   "_4": "Ссылки на файлы GitHub сюда не подходят. Ключ service_role вставлять нельзя.",
-  "supabaseUrl": "",
-  "supabaseAnonKey": ""
+  "supabaseUrl": "https://oljtgvggaurohaccbjyw.supabase.co/rest/v1/",
+  "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sanRndmdnYXVyb2hhY2Nianl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNTg0NjcsImV4cCI6MjEwMDczNDQ2N30.Hcbzs_T2tZjqHNqdAnIPavp6XNRh5wZzAlFvOfF4m30"
 }
