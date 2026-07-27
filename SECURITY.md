@@ -4,7 +4,9 @@ SOWA stores identity and housing data. Treat every deployment as a confidential
 business system.
 
 - Never commit `.env`, the `service_role` key, database passwords, passport
-  exports, or production dumps. Only the public `anon` key is ever shipped.
+  exports, or production dumps. Only the public `anon` key is ever shipped —
+  `public/config.json` is the intended place for it, and it is public on
+  purpose: the same value is inside the JavaScript every visitor downloads.
 - Row Level Security is the authorization boundary. The interface hides buttons
   for convenience; the database is what actually refuses.
 - Passport fields are isolated in `resident_profiles_private`; only `admin` and

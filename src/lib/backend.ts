@@ -49,5 +49,5 @@ export interface Backend {
 
 export const backend: Backend = supabaseBackend
 
-/** False until the Supabase keys are baked into the build. */
+/** False until `initSupabase()` has found a usable URL and key. */
 export const configured = isSupabaseConfigured

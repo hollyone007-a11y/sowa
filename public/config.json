@@ -1,0 +1,7 @@
+{
+  "_1": "Supabase → Settings → API. Вставьте два значения в кавычки ниже и сохраните файл.",
+  "_2": "supabaseUrl — это Project URL. supabaseAnonKey — ключ anon public.",
+  "_3": "Ключ service_role сюда вставлять нельзя.",
+  "supabaseUrl": "",
+  "supabaseAnonKey": ""
+}

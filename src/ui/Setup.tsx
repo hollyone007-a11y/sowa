@@ -1,32 +1,41 @@
+import { ExternalLink } from 'lucide-react'
 import { LogoMark } from './Logo'
 
+const EDIT_URL = 'https://github.com/hollyone007-a11y/sowa/edit/main/public/config.json'
+
 /**
- * Shown when the build carries no Supabase keys. There is no offline mode to
- * fall back to, so the honest thing is to say what is missing rather than
- * render a login form that can never succeed.
+ * Shown when no connection settings were found. There is no offline mode to
+ * fall back to, so the honest thing is to say exactly what is missing and
+ * where it goes.
  */
 export function Setup() {
   return (
     <main className="signin">
       <div className="signin-card setup-card">
-        <LogoMark size={72} className="signin-logo" />
-        <h1>База данных не подключена</h1>
-        <p>
-          Сборка опубликована без ключей Supabase, поэтому вход невозможен.
-          Добавьте два секрета в GitHub → Settings → Secrets and variables →
-          Actions и перезапустите публикацию:
-        </p>
-        <ul>
+        <LogoMark size={64} className="signin-logo" />
+        <h1>Осталось подключить базу</h1>
+
+        <ol className="setup-steps">
           <li>
-            <code>VITE_SUPABASE_URL</code>
+            Создайте проект на <b>supabase.com</b> и откройте в нём{' '}
+            <b>Settings → API</b>.
           </li>
           <li>
-            <code>VITE_SUPABASE_ANON_KEY</code>
+            Скопируйте <b>Project URL</b> и ключ <b>anon public</b>.
           </li>
-        </ul>
+          <li>
+            Вставьте оба значения в файл <code>public/config.json</code> этого
+            репозитория и сохраните — сайт пересоберётся сам за пару минут.
+          </li>
+        </ol>
+
+        <a className="button primary wide" href={EDIT_URL} target="_blank" rel="noreferrer">
+          Открыть config.json <ExternalLink size={16} />
+        </a>
+
         <p className="muted">
-          Порядок настройки проекта и применения миграций описан в README
-          репозитория.
+          Полный порядок настройки, включая схему базы и создание первой учётной
+          записи, описан в README репозитория.
         </p>
       </div>
     </main>

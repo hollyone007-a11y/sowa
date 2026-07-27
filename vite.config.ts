@@ -13,6 +13,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'logo.svg', 'apple-touch-icon.png'],
+      // config.json is edited after deployment; a precached copy would keep
+      // serving the old connection settings.
+      workbox: { globIgnores: ['**/config.json'] },
       manifest: {
         name: 'SOWA AGENCY',
         short_name: 'SOWA',

@@ -114,7 +114,7 @@ export default function App() {
   useEffect(() => {
     // Hooks run even on the render paths that never reach the app shell, and
     // every backend call throws without keys — so this has to bail out first.
-    if (!configured) return
+    if (!configured()) return
     let alive = true
     setSessionReady(false)
     backend
@@ -240,7 +240,7 @@ export default function App() {
 
   // Nothing works without a database, and a login form that cannot possibly
   // succeed is worse than saying so.
-  if (!configured) return <Setup />
+  if (!configured()) return <Setup />
 
   // The QR link is for people who have no account and never will.
   if (joinToken) return <PublicJoin token={joinToken} backend={backend} />

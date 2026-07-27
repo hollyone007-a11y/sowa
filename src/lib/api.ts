@@ -1,5 +1,5 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import { getClient } from './supabase'
 import type { Backend } from './backend'
 import type {
   AppRole, AuthUser, Debtor, Expense, HousingApplication, Period, Property,
@@ -9,8 +9,9 @@ import type { ApprovalInput, ExpenseInput, PublicApplicationInput, ResidentInput
 import { shiftMonth } from './format'
 
 const db = (): SupabaseClient => {
-  if (!supabase) throw new Error('Supabase не настроен: добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY')
-  return supabase
+  const client = getClient()
+  if (!client) throw new Error('База данных не подключена: заполните config.json')
+  return client
 }
 
 /**
