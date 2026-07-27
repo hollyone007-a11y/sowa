@@ -1,0 +1,5 @@
+-- Development-only seed, executed by `npm run seed` against a LOCAL Supabase.
+-- Never run this against production.
+--
+-- Periods are created on demand by `ensure_period`, so there is nothing here
+-- the application needs. Add throwaway records below while developing.

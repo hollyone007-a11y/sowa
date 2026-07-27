@@ -1,0 +1,51 @@
+# Security
+
+SOWA stores identity and housing data. Treat every deployment as a confidential
+business system.
+
+- Never commit `.env`, the `service_role` key, database passwords, passport
+  exports, or production dumps. Only the public `anon` key is ever shipped.
+- Row Level Security is the authorization boundary. The interface hides buttons
+  for convenience; the database is what actually refuses.
+- Passport fields are isolated in `resident_profiles_private`; only `admin` and
+  `manager` policies can read it.
+- `accountant` reads finance and exports it but cannot read passports.
+- `viewer` is read-only and cannot read payments or expenses.
+- Use MFA for the Supabase and GitHub administrator accounts.
+- Review access quarterly and remove accounts immediately when staff leave.
+- Define a retention policy for passport data and delete it when there is no
+  longer a legal or business reason to keep it.
+
+## First administrator
+
+The `handle_new_auth_user` trigger promotes the **first** account created in the
+project to `admin`; everyone after that starts as `viewer`. Create your own
+account immediately after applying the schema, before inviting anyone else, and
+confirm in `public.profiles` that no unexpected account holds `admin`.
+
+## The public QR form
+
+`public_property_by_token` and `submit_housing_application` are the only
+functions granted to `anon`, and they are the entire anonymous surface. An
+application form is a spam target, so it is defended in three places:
+
+- a honeypot field that a person never sees and a bot fills in;
+- a 24-hour duplicate guard on (address, passport number);
+- length and content checks repeated as table constraints.
+
+Rotating an address's QR code invalidates every printed copy immediately. Do
+that if a code is posted somewhere it should not be.
+
+## Known limitations
+
+- `stays` is readable by every authenticated user, so a `viewer` sees prices and
+  paid amounts even though the `payments` ledger itself is restricted. Narrow
+  the `stays_read` policy if rent amounts must be hidden from some staff.
+- The published GitHub Pages build is public, and the `anon` key travels in it.
+  That is by design — the key grants nothing on its own, RLS does the work — but
+  it does mean the login page is reachable by anyone.
+- There is no self-service password reset in the interface. Reset passwords from
+  Supabase → Authentication → Users.
+
+Report security issues privately to the repository owner. Do not open a public
+issue containing personal data or credentials.
