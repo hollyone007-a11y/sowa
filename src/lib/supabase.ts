@@ -15,9 +15,25 @@ interface Config {
   supabaseAnonKey?: string
 }
 
+/** Why there is no connection — the setup screen turns this into advice. */
+export type ConfigProblem = 'none' | 'empty' | 'bad-url' | 'bad-key'
+
 let client: SupabaseClient | null = null
+let problem: ConfigProblem = 'empty'
 
 const clean = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+
+/** `https://<project>.supabase.co`, nothing else. */
+export const looksLikeProjectUrl = (value: string) =>
+  /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(value)
+
+/**
+ * Anon keys are JWTs (`eyJ…`) or the newer `sb_publishable_…` strings. The one
+ * thing they are never is a URL — which is exactly what lands here when the
+ * two setup steps get mixed up.
+ */
+export const looksLikeAnonKey = (value: string) =>
+  value.length >= 30 && !value.includes('://') && !/\s/.test(value)
 
 async function readConfigFile(): Promise<Config> {
   try {
@@ -41,14 +57,28 @@ export async function initSupabase(): Promise<boolean> {
     anonKey = anonKey || clean(config.supabaseAnonKey)
   }
 
-  // Placeholders shipped in the template must not count as configuration.
-  if (!url.startsWith('https://') || anonKey.length < 20) return false
+  if (!url && !anonKey) {
+    problem = 'empty'
+    return false
+  }
+  // Refusing a wrong value beats building a client that fails on every call
+  // with an error nobody can act on.
+  if (!looksLikeProjectUrl(url)) {
+    problem = 'bad-url'
+    return false
+  }
+  if (!looksLikeAnonKey(anonKey)) {
+    problem = 'bad-key'
+    return false
+  }
 
   client = createClient(url, anonKey, {
     auth: { persistSession: true, autoRefreshToken: true },
   })
+  problem = 'none'
   return true
 }
 
 export const getClient = () => client
 export const isSupabaseConfigured = () => client !== null
+export const configProblem = (): ConfigProblem => problem

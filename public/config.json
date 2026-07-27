@@ -1,7 +1,8 @@
 {
-  "_1": "Supabase → Settings → API. Вставьте два значения в кавычки ниже и сохраните файл.",
-  "_2": "supabaseUrl — это Project URL. supabaseAnonKey — ключ anon public.",
-  "_3": "Ключ service_role сюда вставлять нельзя.",
-  "supabaseUrl": "https://raw.githubusercontent.com/hollyone007-a11y/sowa/main/supabase/migrations/20260727000001_initial_schema.sql",
-  "supabaseAnonKey": "https://github.com/hollyone007-a11y/sowa/edit/main/public/config.json"
+  "_1": "Оба значения берутся в Supabase на странице Settings -> API.",
+  "_2": "supabaseUrl  = Project URL. Короткий адрес вида https://xxxxxxxx.supabase.co",
+  "_3": "supabaseAnonKey = ключ anon public. Длинная строка, обычно начинается с eyJ",
+  "_4": "Ссылки на файлы GitHub сюда не подходят. Ключ service_role вставлять нельзя.",
+  "supabaseUrl": "",
+  "supabaseAnonKey": ""
 }

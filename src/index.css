@@ -1483,7 +1483,22 @@ code {
 }
 
 .setup-steps b { color: var(--text); }
+.setup-steps a { color: var(--brand); }
 .setup-card a.button { text-decoration: none; }
+
+.setup-problem {
+  display: flex;
+  gap: 10px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--text) !important;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.setup-problem svg { flex: none; margin-top: 2px; color: var(--warn); }
 
 /* ------------------------------------------------------------ responsive */
 

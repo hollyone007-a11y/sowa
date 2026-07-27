@@ -5,6 +5,7 @@ import { calculateMetrics } from '../lib/metrics'
 import { can } from '../lib/permissions'
 import { staysToCsv } from '../lib/csv'
 import { currentMonth, shiftMonth } from '../lib/format'
+import { looksLikeAnonKey, looksLikeProjectUrl } from '../lib/supabase'
 import { createFakeBackend, fakeProperties, fakeUsers, type FakeBackend } from './fakeBackend'
 import type { Property, Stay } from '../types'
 
@@ -103,6 +104,29 @@ describe('права ролей', () => {
     expect(can('accountant', 'export')).toBe(true)
     expect(can('viewer', 'manage_payments')).toBe(false)
     expect(can('viewer', 'view_finance')).toBe(false)
+  })
+})
+
+describe('настройки подключения', () => {
+  const SQL_FILE_LINK =
+    'https://raw.githubusercontent.com/hollyone007-a11y/sowa/main/supabase/migrations/20260727000001_initial_schema.sql'
+
+  it('принимает адрес проекта и отвергает всё остальное', () => {
+    expect(looksLikeProjectUrl('https://abcdefgh.supabase.co')).toBe(true)
+    expect(looksLikeProjectUrl('https://abcdefgh.supabase.co/')).toBe(true)
+    expect(looksLikeProjectUrl('')).toBe(false)
+    expect(looksLikeProjectUrl('abcdefgh.supabase.co')).toBe(false)
+    // Ровно то, что однажды сюда вставили вместо адреса проекта.
+    expect(looksLikeProjectUrl(SQL_FILE_LINK)).toBe(false)
+  })
+
+  it('не принимает ссылку вместо ключа', () => {
+    expect(looksLikeAnonKey('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature')).toBe(true)
+    expect(looksLikeAnonKey('sb_publishable_0123456789abcdefghijklmno')).toBe(true)
+    expect(looksLikeAnonKey('')).toBe(false)
+    expect(looksLikeAnonKey('короткий')).toBe(false)
+    expect(looksLikeAnonKey(SQL_FILE_LINK)).toBe(false)
+    expect(looksLikeAnonKey('ключ с пробелами внутри строки достаточной длины')).toBe(false)
   })
 })
 

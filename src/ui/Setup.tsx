@@ -1,31 +1,64 @@
-import { ExternalLink } from 'lucide-react'
+import { AlertTriangle, ExternalLink } from 'lucide-react'
 import { LogoMark } from './Logo'
+import { configProblem } from '../lib/supabase'
 
 const EDIT_URL = 'https://github.com/hollyone007-a11y/sowa/edit/main/public/config.json'
+const SQL_URL =
+  'https://github.com/hollyone007-a11y/sowa/blob/main/supabase/migrations/20260727000001_initial_schema.sql'
 
 /**
- * Shown when no connection settings were found. There is no offline mode to
- * fall back to, so the honest thing is to say exactly what is missing and
- * where it goes.
+ * Shown when there is no usable connection. It names the specific mistake
+ * where it can: a filled-in file that still does not work is far more
+ * confusing than an empty one.
  */
 export function Setup() {
+  const problem = configProblem()
+
   return (
     <main className="signin">
       <div className="signin-card setup-card">
         <LogoMark size={64} className="signin-logo" />
         <h1>Осталось подключить базу</h1>
 
+        {problem === 'bad-url' && (
+          <p className="setup-problem">
+            <AlertTriangle size={17} />
+            <span>
+              В поле <code>supabaseUrl</code> лежит не адрес проекта. Нужен
+              короткий адрес вида <code>https://xxxxx.supabase.co</code> — его
+              берут в Supabase на странице <b>Settings → API</b>. Ссылка на файл
+              со схемой сюда не подходит.
+            </span>
+          </p>
+        )}
+
+        {problem === 'bad-key' && (
+          <p className="setup-problem">
+            <AlertTriangle size={17} />
+            <span>
+              В поле <code>supabaseAnonKey</code> лежит не ключ. Ключ — это одна
+              длинная строка без пробелов, обычно начинается с <code>eyJ</code>.
+              Ссылка ключом быть не может.
+            </span>
+          </p>
+        )}
+
         <ol className="setup-steps">
           <li>
-            Создайте проект на <b>supabase.com</b> и откройте в нём{' '}
-            <b>Settings → API</b>.
+            Создайте проект на <b>supabase.com</b>.
           </li>
           <li>
-            Скопируйте <b>Project URL</b> и ключ <b>anon public</b>.
+            Откройте <a href={SQL_URL} target="_blank" rel="noreferrer">файл со схемой</a>,
+            нажмите в нём кнопку <b>Copy raw file</b> и вставьте <b>содержимое</b> в
+            Supabase → <b>SQL Editor</b> → <b>Run</b>.
           </li>
           <li>
-            Вставьте оба значения в файл <code>public/config.json</code> этого
-            репозитория и сохраните — сайт пересоберётся сам за пару минут.
+            В Supabase → <b>Settings → API</b> скопируйте <b>Project URL</b> и
+            ключ <b>anon public</b>.
+          </li>
+          <li>
+            Вставьте их в <code>public/config.json</code> — сайт пересоберётся
+            сам за пару минут.
           </li>
         </ol>
 
@@ -34,8 +67,8 @@ export function Setup() {
         </a>
 
         <p className="muted">
-          Полный порядок настройки, включая схему базы и создание первой учётной
-          записи, описан в README репозитория.
+          Полный порядок настройки, включая создание первой учётной записи,
+          описан в README репозитория.
         </p>
       </div>
     </main>
