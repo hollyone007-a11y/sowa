@@ -3,6 +3,7 @@ export type PaymentMethod = 'cash' | 'salary' | 'free'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'tracking'
 export type DepositStatus = 'none' | 'paid' | 'returned' | 'applied'
 export type PersonKind = 'employee' | 'external'
+export type AgencyPricingModel = 'per_person' | 'fixed'
 
 export interface AuthUser {
   id: string
@@ -79,6 +80,8 @@ export interface Workspace {
   debtors: Debtor[]
   /** Utilities, repairs and other costs booked against this month. */
   expenses: Expense[]
+  agencies: Agency[]
+  agency_allocations: AgencyAllocation[]
 }
 
 export interface DashboardMetrics {
@@ -146,4 +149,36 @@ export interface ResidentPrivateProfile {
   passport_series: string | null
   passport_number: string | null
   ukraine_registration: string | null
+}
+
+export interface Agency {
+  id: string
+  name: string
+  company_id: string | null
+  contact_name: string | null
+  phone: string | null
+  email: string | null
+  note: string | null
+  status: 'active' | 'closed'
+}
+
+export interface AgencyAllocation {
+  id: string
+  period_id: string
+  agency_id: string
+  agency_name: string
+  property_id: string
+  property_name: string
+  full_address: string
+  room_name: string | null
+  bed_name: string | null
+  people_count: number
+  pricing_model: AgencyPricingModel
+  unit_price: number
+  start_date: string
+  end_date: string
+  billable_days: number
+  days_in_month: number
+  total_amount: number
+  note: string | null
 }
