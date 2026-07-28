@@ -429,3 +429,45 @@ left join public.beds bed on bed.id=allocation.bed_id
 where allocation.archived_at is null;
 
 grant select on public.agency_statement_rows to authenticated;
+
+
+create or replace function public.validate_agency_allocation()
+returns trigger language plpgsql security invoker set search_path=public as $$
+declare period_start date; period_end date; period_closed boolean; canonical_room uuid; canonical_bed uuid;
+begin
+  new.room_name:=nullif(trim(new.room_name),''); new.bed_name:=nullif(trim(new.bed_name),''); new.note:=nullif(trim(new.note),'');
+  select make_date(year,month,1),(make_date(year,month,1)+interval '1 month - 1 day')::date,is_closed
+  into period_start,period_end,period_closed from public.periods where id=new.period_id;
+  if period_start is null then raise exception 'selected period does not exist'; end if;
+  if period_closed then raise exception 'period is closed'; end if;
+  if new.start_date<period_start or new.end_date>period_end then raise exception 'allocation dates are outside the selected period'; end if;
+
+  if new.room_id is not null then
+    select id into canonical_room from public.rooms where id=new.room_id and property_id=new.property_id;
+    if canonical_room is null then raise exception 'room does not belong to property'; end if;
+    select name into new.room_name from public.rooms where id=new.room_id;
+  end if;
+  if new.bed_id is not null then
+    select id into canonical_bed from public.beds where id=new.bed_id and room_id=new.room_id and is_active;
+    if canonical_bed is null then raise exception 'bed does not belong to room'; end if;
+    select name into new.bed_name from public.beds where id=new.bed_id;
+  end if;
+
+  if exists(select 1 from public.agency_allocations existing
+    where existing.period_id=new.period_id and existing.property_id=new.property_id
+      and existing.archived_at is null and existing.id is distinct from new.id
+      and (
+        (existing.room_id is null and existing.room_name is null)
+        or (new.room_id is null and new.room_name is null)
+        or (
+          coalesce(existing.room_id::text,lower(existing.room_name))=coalesce(new.room_id::text,lower(new.room_name))
+          and (
+            (existing.bed_id is null and existing.bed_name is null)
+            or (new.bed_id is null and new.bed_name is null)
+            or coalesce(existing.bed_id::text,lower(existing.bed_name))=coalesce(new.bed_id::text,lower(new.bed_name))
+          )
+        )
+      )
+  ) then raise exception 'housing space is already allocated in this period'; end if;
+  new.updated_at:=now(); return new;
+end; $$;
