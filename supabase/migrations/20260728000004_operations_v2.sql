@@ -525,3 +525,31 @@ begin
 end; $$;
 
 grant execute on function public.submit_housing_application(uuid,text,text,text,text,text,text,text,date,boolean,text) to anon,authenticated;
+
+
+alter table public.payments add column archived_at timestamptz, add column archived_by uuid references auth.users(id);
+create policy payments_update on public.payments for update to authenticated
+using (public.has_role(array['admin']::public.app_role[]))
+with check (public.has_role(array['admin']::public.app_role[]));
+
+create or replace function public.reverse_payment(p_payment_id uuid,p_reason text default null)
+returns void language plpgsql security invoker set search_path=public as $$
+declare payment_row public.payments; stay_row public.stays; next_paid numeric;
+begin
+  if not public.has_role(array['admin']::public.app_role[]) then raise exception 'access denied'; end if;
+  select * into payment_row from public.payments where id=p_payment_id and archived_at is null for update;
+  if payment_row.id is null then raise exception 'payment not found'; end if;
+  if (select is_closed from public.periods where id=payment_row.period_id) then raise exception 'period is closed'; end if;
+  select * into stay_row from public.stays where id=payment_row.stay_id for update;
+  next_paid:=greatest(stay_row.paid_amount-payment_row.amount,0);
+  update public.stays set paid_amount=next_paid,payment_status=case
+    when payment_method='free' then 'tracking'::public.payment_status
+    when next_paid=0 then 'unpaid'::public.payment_status
+    when next_paid>=price then 'paid'::public.payment_status else 'partial'::public.payment_status end,
+    updated_at=now() where id=stay_row.id;
+  update public.payments set archived_at=now(),archived_by=auth.uid(),
+    note=concat_ws(' · ',note,nullif(trim(p_reason),'')) where id=payment_row.id;
+end; $$;
+
+grant update on public.payments to authenticated;
+grant execute on function public.reverse_payment(uuid,text) to authenticated;
