@@ -31,7 +31,6 @@ function PlacementFields({
   properties, stays, defaultPropertyId = '', defaultRoom = '', defaultBed = '',
 }: {
   properties: Property[]
-  agencies: Agency[]
   stays: Stay[]
   defaultPropertyId?: string
   defaultRoom?: string
@@ -304,9 +303,6 @@ export function PaymentForm({
   const remaining = remainingOf(stay)
   const [amount, setAmount] = useState(remaining)
   const [error, setError] = useState('')
-  const [attachments, setAttachments] = useState<EntityAttachment[]>([])
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const send = async () => {
@@ -512,6 +508,9 @@ export function ProfileSheet({
 }) {
   const [profile, setProfile] = useState<ResidentPrivateProfile | null>(null)
   const [error, setError] = useState('')
+  const [attachments, setAttachments] = useState<EntityAttachment[]>([])
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     if (!canView) return
