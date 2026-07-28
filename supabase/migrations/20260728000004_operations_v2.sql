@@ -123,11 +123,7 @@ grant select, insert, update on public.agency_payments to authenticated;
 grant select, insert on public.deposit_transactions to authenticated;
 grant select, insert, update on public.entity_attachments to authenticated;
 
--- Canonical inventory. One active resident can occupy a bed in one period.
-create unique index stays_active_bed_per_period_idx
-  on public.stays(period_id, bed_id)
-  where bed_id is not null and move_out is null and archived_at is null;
-
+-- Canonical inventory. New writes cannot double-book a bed; legacy rows remain migratable.
 create or replace function public.validate_stay_inventory()
 returns trigger
 language plpgsql
@@ -157,6 +153,12 @@ begin
     if bed_room is distinct from new.room_id then
       raise exception 'bed does not belong to room';
     end if;
+    if new.move_out is null and new.archived_at is null and exists (
+      select 1 from public.stays occupied
+      where occupied.period_id=new.period_id and occupied.bed_id=new.bed_id
+        and occupied.move_out is null and occupied.archived_at is null
+        and occupied.id is distinct from new.id
+    ) then raise exception 'bed is already occupied'; end if;
   end if;
 
   if new.room_id is not null and new.move_out is null and new.archived_at is null then
