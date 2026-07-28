@@ -146,6 +146,7 @@ export function ResidentForm({
   properties, agencies, stays, defaultPropertyId, defaultMoveIn, onSave,
 }: {
   properties: Property[]
+  agencies: Agency[]
   stays: Stay[]
   defaultPropertyId?: string
   defaultMoveIn: string
@@ -181,9 +182,6 @@ export function ResidentForm({
 
       <PlacementFields properties={properties} stays={stays} defaultPropertyId={defaultPropertyId} />
 
-      <Field label="Агентура">
-        <select name="agency_id" defaultValue={stay.agency_id ?? ''}><option value="">Без агентуры</option>{agencies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-      </Field>
       <Field label="Стоимость в месяц" error={errors.price}>
         <input name="price" type="number" min="0" step="100" defaultValue={0} />
       </Field>
@@ -247,6 +245,9 @@ export function StayEditForm({
         defaultBed={stay.bed_name ?? ''}
       />
 
+      <Field label="Агентура">
+        <select name="agency_id" defaultValue={stay.agency_id ?? ''}><option value="">Без агентуры</option>{agencies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      </Field>
       <Field label="Стоимость в месяц" error={errors.price}>
         <input name="price" type="number" min="0" step="100" defaultValue={stay.price} />
       </Field>
