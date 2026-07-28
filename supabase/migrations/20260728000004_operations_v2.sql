@@ -114,7 +114,7 @@ using (public.has_role(array['admin','manager']::public.app_role[]))
 with check (public.has_role(array['admin','manager']::public.app_role[]));
 
 create policy entity_attachments_read on public.entity_attachments for select to authenticated
-using (public.has_role(array['admin','manager','accountant']::public.app_role[]));
+using (public.has_role(array['admin','manager']::public.app_role[]));
 create policy entity_attachments_manage on public.entity_attachments for all to authenticated
 using (public.has_role(array['admin','manager']::public.app_role[]))
 with check (public.has_role(array['admin','manager']::public.app_role[]));
@@ -562,7 +562,7 @@ values('sowa-documents','sowa-documents',false,15728640,array['application/pdf',
 on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
 
 create policy sowa_documents_read on storage.objects for select to authenticated
-using(bucket_id='sowa-documents' and public.has_role(array['admin','manager','accountant']::public.app_role[]));
+using(bucket_id='sowa-documents' and public.has_role(array['admin','manager']::public.app_role[]));
 create policy sowa_documents_insert on storage.objects for insert to authenticated
 with check(bucket_id='sowa-documents' and public.has_role(array['admin','manager']::public.app_role[]));
 create policy sowa_documents_update on storage.objects for update to authenticated
