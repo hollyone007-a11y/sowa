@@ -3,7 +3,7 @@ import type {
 } from '../types'
 import type {
   ApprovalInput, ExpenseInput, PropertyInput, PublicApplicationInput,
-  ResidentInput, StayEditInput,
+  ResidentInput, StayEditInput, AgencyInput, AgencyAllocationInput,
 } from './schemas'
 import { isSupabaseConfigured } from './supabase'
 import { supabaseBackend } from './api'
@@ -45,6 +45,9 @@ export interface Backend {
 
   createExpense(periodId: string, input: ExpenseInput): Promise<void>
   deleteExpense(expenseId: string): Promise<void>
+  createAgency(input: AgencyInput): Promise<void>
+  createAgencyAllocation(periodId: string, input: AgencyAllocationInput): Promise<void>
+  deleteAgencyAllocation(allocationId: string): Promise<void>
 }
 
 export const backend: Backend = supabaseBackend

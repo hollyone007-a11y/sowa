@@ -17,7 +17,7 @@ export default defineConfig({
       // serving the old connection settings.
       workbox: { globIgnores: ['**/config.json'] },
       manifest: {
-        name: 'SOWA AGENCY',
+        name: 'SOWA AGENSY',
         short_name: 'SOWA',
         description: 'Учёт жилья, жильцов, оплат и долгов',
         lang: 'ru',

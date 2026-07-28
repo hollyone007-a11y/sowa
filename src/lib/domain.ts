@@ -88,3 +88,17 @@ export function mergeDebtors(historic: Debtor[], current: Debtor[]): Debtor[] {
   }
   return [...merged.values()].sort((a, b) => b.amount - a.amount)
 }
+
+/** Inclusive, calendar-month proration used by agency statements. */
+export function proratedAgencyTotal(peopleCount: number, unitPrice: number, pricingModel: 'per_person' | 'fixed', startDate: string, endDate: string, year: number, month: number) {
+  const monthStart = new Date(Date.UTC(year, month - 1, 1))
+  const monthEnd = new Date(Date.UTC(year, month, 0))
+  const requestedStart = new Date(`${startDate}T00:00:00Z`)
+  const requestedEnd = new Date(`${endDate}T00:00:00Z`)
+  const start = requestedStart > monthStart ? requestedStart : monthStart
+  const end = requestedEnd < monthEnd ? requestedEnd : monthEnd
+  if (end < start) return 0
+  const billableDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
+  const multiplier = pricingModel === 'per_person' ? peopleCount : 1
+  return Math.round((unitPrice * multiplier * billableDays) / monthEnd.getUTCDate())
+}

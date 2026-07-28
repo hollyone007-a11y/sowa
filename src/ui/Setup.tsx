@@ -4,7 +4,7 @@ import { configProblem } from '../lib/supabase'
 
 const EDIT_URL = 'https://github.com/hollyone007-a11y/sowa/edit/main/public/config.json'
 const SQL_URL =
-  'https://github.com/hollyone007-a11y/sowa/blob/main/supabase/migrations/20260727000001_initial_schema.sql'
+  'https://github.com/hollyone007-a11y/sowa/tree/main/supabase/migrations'
 
 /**
  * Shown when there is no usable connection. It names the specific mistake
@@ -48,9 +48,9 @@ export function Setup() {
             Создайте проект на <b>supabase.com</b>.
           </li>
           <li>
-            Откройте <a href={SQL_URL} target="_blank" rel="noreferrer">файл со схемой</a>,
-            нажмите в нём кнопку <b>Copy raw file</b> и вставьте <b>содержимое</b> в
-            Supabase → <b>SQL Editor</b> → <b>Run</b>.
+            Откройте <a href={SQL_URL} target="_blank" rel="noreferrer">папку миграций</a>.
+            Выполните в Supabase → <b>SQL Editor</b> все SQL-файлы по порядку имён:
+            откройте файл, нажмите <b>Copy raw file</b>, вставьте содержимое и нажмите <b>Run</b>.
           </li>
           <li>
             В Supabase → <b>Settings → API</b> скопируйте <b>Project URL</b> и

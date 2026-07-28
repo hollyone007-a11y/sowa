@@ -1,5 +1,5 @@
 /**
- * Renders the SOWA AGENCY mark to PNG favicons and PWA icons.
+ * Renders the SOWA AGENSY mark to PNG favicons and PWA icons.
  *
  * The logo is pure geometry, so it is cheaper to rasterise it here with a tiny
  * supersampling renderer than to pull in a headless browser or an image

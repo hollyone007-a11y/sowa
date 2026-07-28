@@ -2,7 +2,7 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { getClient } from './supabase'
 import type { Backend } from './backend'
 import type {
-  AppRole, AuthUser, Debtor, Expense, HousingApplication, Period, Property,
+  Agency, AgencyAllocation, AppRole, AuthUser, Debtor, Expense, HousingApplication, Period, Property,
   PublicProperty, ResidentPrivateProfile, Stay, Workspace,
 } from '../types'
 import type { ApprovalInput, ExpenseInput, PublicApplicationInput, ResidentInput, StayEditInput } from './schemas'
@@ -25,6 +25,8 @@ function readable(error: { message?: string; code?: string } | null): Error {
   }
   if (/access denied/i.test(message)) return new Error('Недостаточно прав для этого действия')
   if (/period is closed|target period is closed/i.test(message)) return new Error('Период закрыт для изменений')
+  if (/housing space is already allocated/i.test(message)) return new Error('Это жильё уже закреплено за другой агентурой в выбранном месяце')
+  if (/allocation dates are outside/i.test(message)) return new Error('Даты аренды не входят в выбранный месяц')
   if (/invalid payment amount/i.test(message)) return new Error('Некорректная сумма оплаты')
   if (/Failed to fetch|NetworkError/i.test(message)) return new Error('Нет связи с сервером')
   return new Error(message)
@@ -120,7 +122,7 @@ export const supabaseBackend: Backend = {
   async loadWorkspace(year, month): Promise<Workspace> {
     const client = db()
     const period = await loadPeriod(year, month)
-    const [properties, stays, debtors, expenses] = await Promise.all([
+    const [properties, stays, debtors, expenses, agencies, allocations] = await Promise.all([
       client.from('property_period_summary').select('*').eq('period_id', period.id).order('name'),
       client.from('stay_details').select('*').eq('period_id', period.id).order('full_name'),
       client.rpc('historic_debt', { p_period_id: period.id }),
@@ -129,6 +131,8 @@ export const supabaseBackend: Backend = {
         .select('id,period_id,property_id,category,amount,description,incurred_on,properties(name)')
         .eq('period_id', period.id)
         .order('incurred_on', { ascending: false }),
+      client.from('agencies').select('*').eq('status', 'active').order('name'),
+      client.from('agency_statement_rows').select('*').eq('period_id', period.id).order('full_address'),
     ])
     if (properties.error) throw readable(properties.error)
     if (stays.error) throw readable(stays.error)
@@ -140,6 +144,8 @@ export const supabaseBackend: Backend = {
       // that must leave the rest of the page working rather than blank it.
       debtors: debtors.error ? [] : ((debtors.data ?? []) as Debtor[]),
       expenses: expenses.error ? [] : toExpenses(expenses.data),
+      agencies: agencies.error ? [] : ((agencies.data ?? []) as Agency[]),
+      agency_allocations: allocations.error ? [] : ((allocations.data ?? []) as AgencyAllocation[]),
     }
   },
 
@@ -333,6 +339,21 @@ export const supabaseBackend: Backend = {
 
   async deleteExpense(expenseId) {
     const { error } = await db().from('property_expenses').delete().eq('id', expenseId)
+    if (error) throw readable(error)
+  },
+
+  async createAgency(input) {
+    const { error } = await db().from('agencies').insert({ name: input.name, company_id: input.company_id || null, contact_name: input.contact_name || null, phone: input.phone || null, email: input.email || null, note: input.note || null })
+    if (error) throw readable(error)
+  },
+
+  async createAgencyAllocation(periodId, input) {
+    const { error } = await db().from('agency_allocations').insert({ period_id: periodId, agency_id: input.agency_id, property_id: input.property_id, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, note: input.note || null, created_by: (await db().auth.getUser()).data.user?.id ?? null })
+    if (error) throw readable(error)
+  },
+
+  async deleteAgencyAllocation(allocationId) {
+    const { error } = await db().from('agency_allocations').delete().eq('id', allocationId)
     if (error) throw readable(error)
   },
 }

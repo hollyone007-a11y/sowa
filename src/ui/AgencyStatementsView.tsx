@@ -1,0 +1,131 @@
+import { useMemo, useState } from 'react'
+import { Building2, Download, FileText, Plus, Printer, Trash2, UsersRound } from 'lucide-react'
+import { agencyAllocationSchema, agencySchema } from '../lib/schemas'
+import { downloadAgencyStatementCsv } from '../lib/csv'
+import { formatDate, money } from '../lib/format'
+import { can } from '../lib/permissions'
+import { useZodForm } from './useZodForm'
+import type { Agency, AgencyAllocation, AppRole, Property } from '../types'
+import type { AgencyAllocationInput, AgencyInput } from '../lib/schemas'
+
+function ErrorText({ value }: { value?: string }) {
+  return value ? <small className="field-error">{value}</small> : null
+}
+
+export function AgencyStatementsView({
+  agencies, allocations, properties, role, periodId, monthTitle, defaultStart, defaultEnd,
+  periodClosed, onCreateAgency, onCreateAllocation, onDeleteAllocation,
+}: {
+  agencies: Agency[]
+  allocations: AgencyAllocation[]
+  properties: Property[]
+  role: AppRole
+  periodId: string
+  monthTitle: string
+  defaultStart: string
+  defaultEnd: string
+  periodClosed: boolean
+  onCreateAgency: (input: AgencyInput) => Promise<void>
+  onCreateAllocation: (periodId: string, input: AgencyAllocationInput) => Promise<void>
+  onDeleteAllocation: (allocation: AgencyAllocation) => void
+}) {
+  const [agencyId, setAgencyId] = useState(agencies[0]?.id ?? 'all')
+  const [showAgencyForm, setShowAgencyForm] = useState(false)
+  const [showAllocationForm, setShowAllocationForm] = useState(false)
+  const agencyForm = useZodForm(agencySchema)
+  const allocationForm = useZodForm(agencyAllocationSchema)
+
+  const rows = useMemo(
+    () => allocations.filter((item) => agencyId === 'all' || item.agency_id === agencyId),
+    [allocations, agencyId],
+  )
+  const selectedAgency = agencies.find((item) => item.id === agencyId)
+  const total = rows.reduce((sum, item) => sum + Number(item.total_amount), 0)
+  const people = rows.reduce((sum, item) => sum + item.people_count, 0)
+
+  const print = () => window.print()
+  const download = () => downloadAgencyStatementCsv(rows, selectedAgency?.name ?? 'all-agencies', monthTitle)
+
+  return <div className="agency-page">
+    <section className="agency-toolbar no-print">
+      <div>
+        <span className="eyebrow">Раздельный учёт</span>
+        <h1>Ведомости агентур</h1>
+        <p>Кто арендует адрес, комнату или место и сколько должен за выбранный месяц.</p>
+      </div>
+      <div className="agency-toolbar-actions">
+        <select value={agencyId} onChange={(event) => setAgencyId(event.target.value)} aria-label="Выбор агентуры">
+          <option value="all">Все агентуры</option>
+          {agencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.name}</option>)}
+        </select>
+        {can(role, 'manage_properties') && !periodClosed && <>
+          <button className="button ghost" type="button" onClick={() => setShowAgencyForm((value) => !value)}><Building2 size={17} /> Агентура</button>
+          <button className="button primary" type="button" onClick={() => setShowAllocationForm((value) => !value)} disabled={!agencies.length || !properties.length}><Plus size={17} /> Строка аренды</button>
+        </>}
+      </div>
+    </section>
+
+    {showAgencyForm && <form className="panel agency-editor no-print" onSubmit={agencyForm.submit(async (input) => { await onCreateAgency(input); setShowAgencyForm(false) })}>
+      <header className="panel-head"><h2>Новая агентура</h2></header>
+      <div className="form-grid three">
+        <label>Название<input name="name" placeholder="Agentura Alfa" /><ErrorText value={agencyForm.errors.name} /></label>
+        <label>IČO / код компании<input name="company_id" placeholder="12345678" /></label>
+        <label>Контакт<input name="contact_name" placeholder="Имя менеджера" /></label>
+        <label>Телефон<input name="phone" inputMode="tel" /></label>
+        <label>E-mail<input name="email" type="email" /></label>
+        <label>Комментарий<input name="note" /></label>
+      </div>
+      {agencyForm.formError && <p className="form-error">{agencyForm.formError}</p>}
+      <button className="button primary" disabled={agencyForm.busy}>Создать агентуру</button>
+    </form>}
+
+    {showAllocationForm && <form className="panel agency-editor no-print" onSubmit={allocationForm.submit(async (input) => { await onCreateAllocation(periodId, input); setShowAllocationForm(false) })}>
+      <header className="panel-head"><div><h2>Новая строка ведомости</h2><p>Если комната и место пустые, агентуре закрепляется весь адрес.</p></div></header>
+      <div className="form-grid four">
+        <label>Агентура<select name="agency_id" defaultValue={agencyId === 'all' ? agencies[0]?.id : agencyId}>{agencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.name}</option>)}</select><ErrorText value={allocationForm.errors.agency_id} /></label>
+        <label>Адрес<select name="property_id" defaultValue=""><option value="">Выберите адрес</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select><ErrorText value={allocationForm.errors.property_id} /></label>
+        <label>Комната<input name="room_name" placeholder="Комната 2" /></label>
+        <label>Место<input name="bed_name" placeholder="Место 1" /></label>
+        <label>Количество людей<input name="people_count" type="number" min="1" defaultValue="1" /><ErrorText value={allocationForm.errors.people_count} /></label>
+        <label>Расчёт<select name="pricing_model" defaultValue="per_person"><option value="per_person">За человека</option><option value="fixed">Фиксированная сумма</option></select></label>
+        <label>Цена, Kč<input name="unit_price" type="number" min="0" step="1" defaultValue="7000" /><ErrorText value={allocationForm.errors.unit_price} /></label>
+        <label>Начало<input name="start_date" type="date" defaultValue={defaultStart} /><ErrorText value={allocationForm.errors.start_date} /></label>
+        <label>Окончание<input name="end_date" type="date" defaultValue={defaultEnd} /><ErrorText value={allocationForm.errors.end_date} /></label>
+        <label className="span-two">Примечание<input name="note" placeholder="Номер договора или пояснение" /></label>
+      </div>
+      {allocationForm.formError && <p className="form-error">{allocationForm.formError}</p>}
+      <button className="button primary" disabled={allocationForm.busy}>Добавить в ведомость</button>
+    </form>}
+
+    <section className="statement-sheet">
+      <header className="statement-head">
+        <div><WordmarkSmall /><div><span>SOWA AGENSY</span><h2>Ведомость проживания</h2><p>{selectedAgency?.name ?? 'Все агентуры'} · {monthTitle}</p></div></div>
+        <div className="statement-actions no-print">
+          <button className="button ghost" type="button" onClick={download} disabled={!rows.length}><Download size={17} /> CSV</button>
+          <button className="button ghost" type="button" onClick={print} disabled={!rows.length}><Printer size={17} /> PDF / печать</button>
+        </div>
+      </header>
+
+      {rows.length ? <>
+        <div className="statement-summary"><span><UsersRound /> {people} чел.</span><span><FileText /> {rows.length} строк</span><strong>{money(total)}</strong></div>
+        <div className="statement-table-wrap">
+          <table className="statement-table">
+            <thead><tr><th>Č.</th><th>Počet osob</th><th>Adresa</th><th>Celkem</th><th className="no-print" /></tr></thead>
+            <tbody>{rows.map((row, index) => <tr key={row.id}>
+              <td data-label="№">{index + 1}</td>
+              <td data-label="Людей">{row.people_count} {row.people_count === 1 ? 'osoba' : 'osoby'}</td>
+              <td data-label="Адрес"><strong>{row.full_address}</strong><span>{row.room_name || 'Весь адрес'}{row.bed_name ? ` · ${row.bed_name}` : ''}</span><small>{row.pricing_model === 'per_person' ? `${money(row.unit_price)}/os` : `фиксировано ${money(row.unit_price)}`}{row.billable_days < row.days_in_month ? ` · ${formatDate(row.start_date)}–${formatDate(row.end_date)}` : ''}</small>{row.note && <em>{row.note}</em>}</td>
+              <td data-label="Сумма">{money(row.total_amount)}</td>
+              <td className="no-print">{can(role, 'manage_properties') && !periodClosed && <button type="button" className="icon-button danger" aria-label="Удалить строку" onClick={() => onDeleteAllocation(row)}><Trash2 size={16} /></button>}</td>
+            </tr>)}</tbody>
+            <tfoot><tr><td colSpan={3}>Celkem</td><td>{money(total)}</td><td className="no-print" /></tr></tfoot>
+          </table>
+        </div>
+      </> : <div className="statement-empty"><FileText /><h2>Ведомость пока пустая</h2><p>Создайте агентуру и добавьте арендованный адрес, комнату или место.</p></div>}
+    </section>
+  </div>
+}
+
+function WordmarkSmall() {
+  return <span className="statement-owl" aria-hidden="true">◉</span>
+}

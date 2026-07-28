@@ -1,5 +1,5 @@
 /**
- * SOWA AGENCY mark: an owl's face sheltered under a roof line.
+ * SOWA AGENSY mark: an owl's face sheltered under a roof line.
  * The owl is the name, the roof is the business — one shape says both.
  * Everything is geometry, so it stays readable down to a 16px favicon.
  */
@@ -11,7 +11,7 @@ export function LogoMark({ size = 40, className }: { size?: number; className?: 
       viewBox="0 0 48 48"
       className={className}
       role="img"
-      aria-label="SOWA AGENCY"
+      aria-label="SOWA AGENSY"
     >
       <defs>
         <linearGradient id="sowa-badge" x1="0" y1="0" x2="1" y2="1">
@@ -42,7 +42,7 @@ export function Wordmark({ size = 40 }: { size?: number }) {
     <span className="wordmark">
       <LogoMark size={size} />
       <span>
-        SOWA <b>AGENCY</b>
+        SOWA <b>AGENSY</b>
       </span>
     </span>
   )

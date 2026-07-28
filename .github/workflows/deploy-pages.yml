@@ -30,7 +30,7 @@ jobs:
         env:
           # GitHub Pages serves a project site from /<repo>/.
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-          # Optional: without them the published app runs in demo mode.
+          # Optional: environment variables override public/config.json.
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build

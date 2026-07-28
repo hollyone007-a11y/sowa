@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Building2, ChevronLeft, ChevronRight, CircleDollarSign, Download, FileInput,
+  Building2, ChevronLeft, ChevronRight, CircleDollarSign, Download, FileInput, FileSpreadsheet,
   LogOut, Moon, Plus, QrCode, Search, Sun, UsersRound,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -15,6 +15,7 @@ import {
 } from './ui/forms'
 import { ResidentsView } from './ui/ResidentsView'
 import { ApplicationsView, QrView } from './ui/onboarding'
+import { AgencyStatementsView } from './ui/AgencyStatementsView'
 import { CarryOverBanner, FinanceView, PropertiesView, StatStrip } from './ui/views'
 import { backend, configured } from './lib/backend'
 import { can, roleLabels } from './lib/permissions'
@@ -23,9 +24,9 @@ import { remainingOf } from './lib/domain'
 import { downloadStaysCsv } from './lib/csv'
 import { currentMonth, firstDayOf, monthLabel, shiftMonth } from './lib/format'
 import type { Permission } from './lib/permissions'
-import type { AuthUser, Expense, HousingApplication, Property, Stay, Workspace } from './types'
+import type { AgencyAllocation, AuthUser, Expense, HousingApplication, Property, Stay, Workspace } from './types'
 
-type Tab = 'residents' | 'properties' | 'applications' | 'finance' | 'qr'
+type Tab = 'residents' | 'properties' | 'applications' | 'finance' | 'agencies' | 'qr'
 type FilterKey = 'all' | 'debt' | 'unassigned' | 'cash' | 'salary' | 'external' | 'departed'
 
 type ModalState =
@@ -39,6 +40,7 @@ type ModalState =
   | { kind: 'reject'; application: HousingApplication }
   | { kind: 'expense' }
   | { kind: 'delete-expense'; expense: Expense }
+  | { kind: 'delete-allocation'; allocation: AgencyAllocation }
   | null
 
 /** The token in a QR link, wherever the app is mounted. */
@@ -63,6 +65,7 @@ const TABS: Array<[Tab, string, typeof UsersRound, Permission]> = [
   ['properties', 'Адреса', Building2, 'view'],
   ['applications', 'Заявки', FileInput, 'manage_residents'],
   ['finance', 'Финансы', CircleDollarSign, 'view_finance'],
+  ['agencies', 'Агентуры', FileSpreadsheet, 'view_finance'],
   ['qr', 'QR-коды', QrCode, 'manage_properties'],
 ]
 
@@ -195,6 +198,8 @@ export default function App() {
   const stays = useMemo(() => workspace?.stays ?? [], [workspace])
   const debtors = useMemo(() => workspace?.debtors ?? [], [workspace])
   const expenses = useMemo(() => workspace?.expenses ?? [], [workspace])
+  const agencies = useMemo(() => workspace?.agencies ?? [], [workspace])
+  const agencyAllocations = useMemo(() => workspace?.agency_allocations ?? [], [workspace])
   const metrics = useMemo(
     () => calculateMetrics(properties, stays, debtors, expenses),
     [properties, stays, debtors, expenses],
@@ -469,6 +474,14 @@ export default function App() {
           />
         )}
 
+        {tab === 'agencies' && can(role, 'view_finance') && workspace && (
+          <AgencyStatementsView agencies={agencies} allocations={agencyAllocations} properties={properties} role={role} periodId={workspace.period.id} monthTitle={title} defaultStart={firstDayOf(month.year, month.month)} defaultEnd={new Date(Date.UTC(month.year, month.month, 0)).toISOString().slice(0, 10)} periodClosed={periodClosed}
+            onCreateAgency={async (input) => { await run(async () => { await backend.createAgency(input); return `Агентура «${input.name}» создана` }) }}
+            onCreateAllocation={async (periodId, input) => { await run(async () => { await backend.createAgencyAllocation(periodId, input); return 'Строка добавлена в ведомость' }) }}
+            onDeleteAllocation={(allocation) => setModal({ kind: 'delete-allocation', allocation })}
+          />
+        )}
+
         {tab === 'finance' &&
           (can(role, 'view_finance') ? (
             <FinanceView
@@ -642,6 +655,10 @@ export default function App() {
             }).catch(() => undefined)
           }}
         />
+      )}
+
+      {modal?.kind === 'delete-allocation' && (
+        <Confirm danger title="Удалить строку ведомости" text={`Аренда «${modal.allocation.full_address}${modal.allocation.room_name ? ` · ${modal.allocation.room_name}` : ''}» будет удалена.`} confirmLabel="Удалить" onCancel={() => setModal(null)} onConfirm={() => { const allocation = modal.allocation; setModal(null); void run(async () => { await backend.deleteAgencyAllocation(allocation.id); return 'Строка ведомости удалена' }).catch(() => undefined) }} />
       )}
 
       {modal?.kind === 'delete' && (
