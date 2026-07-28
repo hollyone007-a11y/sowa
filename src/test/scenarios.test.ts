@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { propertySchema, residentSchema, stayEditSchema } from '../lib/schemas'
-import { applyPayment, prepareMonthCopy, remainingOf, summarizeProperties } from '../lib/domain'
+import { applyPayment, prepareMonthCopy, proratedAgencyTotal, remainingOf, summarizeProperties } from '../lib/domain'
 import { calculateMetrics } from '../lib/metrics'
 import { can } from '../lib/permissions'
 import { staysToCsv } from '../lib/csv'
@@ -253,5 +253,20 @@ describe('рабочие сценарии через контракт Backend', 
     expect(workspace.stays.every((item) => item.paid_amount === 0)).toBe(true)
     // Повторный перенос ничего не дублирует.
     expect(await backend.copyPreviousMonth(next.year, next.month, true)).toBe(0)
+  })
+})
+
+
+describe('ведомость агентуры', () => {
+  it('считает полный месяц без округления дней', () => {
+    expect(proratedAgencyTotal(2, 7500, '2026-08', null, null)).toBe(15000)
+  })
+
+  it('считает неполный период включительно по датам', () => {
+    expect(proratedAgencyTotal(2, 8500, '2026-07', '2026-07-27', '2026-07-31')).toBe(2742)
+  })
+
+  it('не переносит начисление в другой месяц', () => {
+    expect(proratedAgencyTotal(2, 7500, '2026-08', '2026-07-01', '2026-07-31')).toBe(0)
   })
 })
