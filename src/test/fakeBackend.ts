@@ -599,6 +599,8 @@ export function createFakeBackend(): FakeBackend {
       db.agencies.push({ id: uid('agency'), name: input.name, company_id: input.company_id || null, contact_name: input.contact_name || null, phone: input.phone || null, email: input.email || null, note: input.note || null, status: 'active' })
     },
 
+    async updateAgency(agencyId, input) { const agency=db.agencies.find(item=>item.id===agencyId); if(agency) Object.assign(agency,input) },
+
     async createAgencyAllocation(periodId, input) {
       assertOpen(periodId)
       const period = db.periods.find((item) => item.id === periodId)
@@ -614,6 +616,8 @@ export function createFakeBackend(): FakeBackend {
       const billableDays = end < start ? 0 : Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
       db.agency_allocations.push({ id: uid('allocation'), period_id: periodId, agency_id: agency.id, agency_name: agency.name, property_id: property.id, property_name: property.name, full_address: property.full_address, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, billable_days: billableDays, days_in_month: monthEnd.getUTCDate(), total_amount: proratedAgencyTotal(input.people_count, input.unit_price, input.pricing_model, input.start_date, input.end_date, period.year, period.month), note: input.note || null, room_id: input.room_id || null, bed_id: input.bed_id || null })
     },
+
+    async updateAgencyAllocation(allocationId, input) { const row=db.agency_allocations.find(item=>item.id===allocationId); if(row) Object.assign(row,input) },
 
     async deleteAgencyAllocation(allocationId) {
       const allocation = db.agency_allocations.find((item) => item.id === allocationId)
