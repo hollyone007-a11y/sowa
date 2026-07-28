@@ -507,7 +507,7 @@ export function ProfileSheet({
         <header className="sheet-head">
           <LogoMark size={40} />
           <div>
-            <strong>SOWA AGENCY</strong>
+            <strong>SOWA AGENSY</strong>
             <small>Анкета проживающего</small>
           </div>
         </header>
@@ -559,7 +559,7 @@ export function ProfileSheet({
         </dl>
         <div className="sheet-signatures">
           <span>Подпись проживающего</span>
-          <span>Подпись представителя SOWA AGENCY</span>
+          <span>Подпись представителя SOWA AGENSY</span>
         </div>
       </div>
       <button type="button" className="button primary wide no-print" onClick={() => window.print()}>
