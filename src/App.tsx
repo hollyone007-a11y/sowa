@@ -23,7 +23,7 @@ import { can, roleLabels } from './lib/permissions'
 import { calculateMetrics } from './lib/metrics'
 import { remainingOf } from './lib/domain'
 import { downloadStaysCsv } from './lib/csv'
-import { currentMonth, firstDayOf, monthLabel, shiftMonth } from './lib/format'
+import { currentMonth, firstDayOf, money, monthLabel, shiftMonth } from './lib/format'
 import type { Permission } from './lib/permissions'
 import type { AgencyAllocation, AppProfile, AuditEntry, AuthUser, Expense, HousingApplication, Property, Stay, Workspace } from './types'
 
