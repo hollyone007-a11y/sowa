@@ -4,7 +4,7 @@ import { applyPayment, prepareMonthCopy, proratedAgencyTotal, remainingOf, summa
 import { calculateMetrics } from '../lib/metrics'
 import { can } from '../lib/permissions'
 import { staysToCsv } from '../lib/csv'
-import { currentMonth, shiftMonth } from '../lib/format'
+import { currentMonth, firstDayOf, shiftMonth } from '../lib/format'
 import { looksLikeAnonKey, looksLikeProjectUrl } from '../lib/supabase'
 import { createFakeBackend, fakeProperties, fakeUsers, type FakeBackend } from './fakeBackend'
 import type { Property, Stay } from '../types'
