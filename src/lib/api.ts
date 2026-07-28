@@ -4,7 +4,7 @@ import type { Backend } from './backend'
 import type {
   Agency, AgencyAllocation, AgencyFinancialSummary, AgencyPayment, AppProfile, AppRole, AuditEntry,
   AuthUser, Debtor, DepositTransaction, EntityAttachment, Expense, HousingApplication, InventorySlot,
-  Period, Property, PublicProperty, ResidentPrivateProfile, Stay, Workspace,
+  PaymentEntry, Period, Property, PublicProperty, ResidentPrivateProfile, Stay, Workspace,
 } from '../types'
 import type { AgencyPaymentInput, ApprovalInput, BedInput, DepositTransactionInput, ExpenseInput, PublicApplicationInput, ResidentInput, RoomInput, StayEditInput } from './schemas'
 import { shiftMonth } from './format'
@@ -124,7 +124,7 @@ export const supabaseBackend: Backend = {
   async loadWorkspace(year, month): Promise<Workspace> {
     const client = db()
     const period = await loadPeriod(year, month)
-    const [properties, stays, debtors, expenses, agencies, allocations, inventory, agencyFinancials, agencyPayments, deposits] = await Promise.all([
+    const [properties, stays, debtors, expenses, agencies, allocations, inventory, agencyFinancials, agencyPayments, deposits, paymentHistory] = await Promise.all([
       client.from('property_period_summary').select('*').eq('period_id', period.id).order('name'),
       client.from('stay_details').select('*').eq('period_id', period.id).order('full_name'),
       client.rpc('historic_debt', { p_period_id: period.id }),
@@ -140,6 +140,7 @@ export const supabaseBackend: Backend = {
       client.from('agency_financial_summary').select('*').eq('period_id', period.id).order('agency_name'),
       client.from('agency_payments').select('id,period_id,agency_id,amount,paid_on,method,note').eq('period_id', period.id).is('archived_at', null).order('paid_on', { ascending: false }),
       client.from('deposit_transactions').select('id,stay_id,period_id,kind,amount,occurred_on,note').eq('period_id', period.id).order('occurred_on', { ascending: false }),
+      client.from('payments').select('id,stay_id,period_id,amount,method,paid_at,note').eq('period_id', period.id).is('archived_at', null).order('paid_at', { ascending: false }),
     ])
     if (properties.error) throw readable(properties.error)
     if (stays.error) throw readable(stays.error)
@@ -157,6 +158,7 @@ export const supabaseBackend: Backend = {
       agency_financials: agencyFinancials.error ? [] : ((agencyFinancials.data ?? []) as AgencyFinancialSummary[]),
       agency_payments: agencyPayments.error ? [] : ((agencyPayments.data ?? []) as AgencyPayment[]),
       deposit_transactions: deposits.error ? [] : ((deposits.data ?? []) as DepositTransaction[]),
+      payments: paymentHistory.error ? [] : ((paymentHistory.data ?? []) as PaymentEntry[]),
     }
   },
 
@@ -243,6 +245,11 @@ export const supabaseBackend: Backend = {
 
   async recordPayment(stayId, amount) {
     const { error } = await db().rpc('record_payment', { p_stay_id: stayId, p_amount: amount })
+    if (error) throw readable(error)
+  },
+
+  async reversePayment(paymentId, reason) {
+    const { error } = await db().rpc('reverse_payment', { p_payment_id: paymentId, p_reason: reason || null })
     if (error) throw readable(error)
   },
 
