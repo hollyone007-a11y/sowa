@@ -2,11 +2,7 @@ import { useState } from 'react'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { LogoMark } from './Logo'
 
-/**
- * Deliberately wordless: the mark, two fields and a button.
- * Labels exist for screen readers only, and the sole visible text is an error
- * — which appears when something actually went wrong.
- */
+/** Compact, explicit sign-in: new staff can use it without prior instruction. */
 export function Login({
   onSignIn,
 }: {
@@ -34,27 +30,39 @@ export function Login({
     <main className="signin">
       <form className="signin-card" onSubmit={submit}>
         <LogoMark size={72} className="signin-logo" />
+        <header className="signin-head">
+          <h1>SOWA AGENSY</h1>
+          <p>Система учёта жилья</p>
+        </header>
 
-        <input
+        <label className="signin-field">
+          <span>E-mail</span>
+          <input
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           aria-label="E-mail"
           autoComplete="username"
           autoFocus
+          placeholder="name@company.cz"
           required
         />
-        <input
+        </label>
+        <label className="signin-field">
+          <span>Пароль</span>
+          <input
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           aria-label="Пароль"
           autoComplete="current-password"
+          placeholder="Введите пароль"
           required
         />
+        </label>
 
-        <button type="submit" className="signin-go" aria-label="Войти" disabled={busy}>
-          {busy ? <Loader2 size={22} className="spin" /> : <ArrowRight size={22} />}
+        <button type="submit" className="signin-go" disabled={busy}>
+          {busy ? <Loader2 size={20} className="spin" /> : <><span>Войти</span><ArrowRight size={20} /></>}
         </button>
 
         {error && (

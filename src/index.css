@@ -1418,6 +1418,13 @@ code {
   box-shadow: var(--shadow-md);
 }
 
+.signin-head { text-align: center; margin: -2px 0 6px; }
+.signin-head h1 { font-size: 1.15rem; letter-spacing: 0.06em; }
+.signin-head p { margin-top: 4px; font-size: 0.86rem; color: var(--muted); }
+
+.signin-field { display: grid; gap: 6px; }
+.signin-field > span { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+
 .signin-card input {
   width: 100%;
   padding: 13px 15px;
@@ -1436,8 +1443,10 @@ code {
 }
 
 .signin-go {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
   height: 48px;
   margin-top: 2px;
   border-radius: var(--radius);
