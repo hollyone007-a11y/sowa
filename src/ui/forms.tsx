@@ -10,7 +10,7 @@ import {
 } from '../lib/schemas'
 import { remainingOf } from '../lib/domain'
 import { categoryText, depositText, formatDate, methodText, money, today } from '../lib/format'
-import type { Agency, HousingApplication, Property, ResidentPrivateProfile, Stay } from '../types'
+import type { Agency, EntityAttachment, HousingApplication, Property, ResidentPrivateProfile, Stay } from '../types'
 
 /** Room and bed names already used at an address, so nobody retypes them. */
 function placementSuggestions(stays: Stay[], propertyId: string) {
@@ -304,6 +304,9 @@ export function PaymentForm({
   const remaining = remainingOf(stay)
   const [amount, setAmount] = useState(remaining)
   const [error, setError] = useState('')
+  const [attachments, setAttachments] = useState<EntityAttachment[]>([])
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const send = async () => {
@@ -499,11 +502,13 @@ export function DepositTransactionForm({
 }
 
 export function ProfileSheet({
-  stay, canView, load,
+  stay, canView, load, loadAttachments, uploadAttachment,
 }: {
   stay: Stay
   canView: boolean
   load: (personId: string) => Promise<ResidentPrivateProfile>
+  loadAttachments: (entityType: 'person', entityId: string) => Promise<EntityAttachment[]>
+  uploadAttachment: (entityType: 'person', entityId: string, file: File) => Promise<void>
 }) {
   const [profile, setProfile] = useState<ResidentPrivateProfile | null>(null)
   const [error, setError] = useState('')
@@ -514,10 +519,11 @@ export function ProfileSheet({
     load(stay.person_id)
       .then((result) => alive && setProfile(result))
       .catch((cause: unknown) => alive && setError(cause instanceof Error ? cause.message : 'Не удалось загрузить анкету'))
+    void loadAttachments('person',stay.person_id).then(result => alive && setAttachments(result)).catch(() => undefined)
     return () => {
       alive = false
     }
-  }, [canView, load, stay.person_id])
+  }, [canView, load, loadAttachments, stay.person_id])
 
   if (!canView) {
     return (
@@ -593,6 +599,14 @@ export function ProfileSheet({
           <span>Подпись представителя SOWA AGENSY</span>
         </div>
       </div>
+
+      <section className="attachments no-print">
+        <h3>Документы</h3>
+        {attachments.map(item => <div key={item.id}><span><strong>{item.file_name}</strong><small>{Math.ceil(item.size_bytes/1024)} КБ</small></span></div>)}
+        <label className="button ghost wide">Выбрать PDF или изображение<input type="file" accept=".pdf,image/jpeg,image/png,image/webp" hidden onChange={event => setSelectedFile(event.target.files?.[0] ?? null)}/></label>
+        {selectedFile && <button type="button" className="button primary wide" disabled={uploading} onClick={() => { setUploading(true); void uploadAttachment('person',stay.person_id,selectedFile).then(() => loadAttachments('person',stay.person_id)).then(setAttachments).then(() => setSelectedFile(null)).catch(cause => setError(cause instanceof Error ? cause.message : 'Не удалось загрузить')).finally(() => setUploading(false)) }}>{uploading ? 'Загрузка…' : `Загрузить ${selectedFile.name}`}</button>}
+      </section>
+
       <button type="button" className="button primary wide no-print" onClick={() => window.print()}>
         <Printer size={17} /> Печать или сохранение в PDF
       </button>
