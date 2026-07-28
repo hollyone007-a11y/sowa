@@ -65,6 +65,7 @@ export interface Backend {
   listAttachments(entityType: EntityAttachment['entity_type'], entityId: string): Promise<EntityAttachment[]>
   createAttachmentMetadata(input: Omit<EntityAttachment, 'id' | 'created_at'>): Promise<void>
   uploadAttachment(entityType: EntityAttachment['entity_type'], entityId: string, file: File): Promise<void>
+  getAttachmentUrl(storagePath: string): Promise<string>
 }
 
 export const backend: Backend = supabaseBackend
