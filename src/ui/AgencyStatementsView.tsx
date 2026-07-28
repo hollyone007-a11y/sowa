@@ -38,6 +38,8 @@ export function AgencyStatementsView({
   const [showAgencyForm, setShowAgencyForm] = useState(false)
   const [showAllocationForm, setShowAllocationForm] = useState(false)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [allocationPropertyId, setAllocationPropertyId] = useState('')
+  const [allocationRoomId, setAllocationRoomId] = useState('')
   const agencyForm = useZodForm(agencySchema)
   const allocationForm = useZodForm(agencyAllocationSchema)
   const paymentForm = useZodForm(agencyPaymentSchema)
@@ -94,9 +96,9 @@ export function AgencyStatementsView({
       <header className="panel-head"><div><h2>Новая строка ведомости</h2><p>Если комната и место пустые, агентуре закрепляется весь адрес.</p></div></header>
       <div className="form-grid four">
         <label>Агентура<select name="agency_id" defaultValue={agencyId === 'all' ? agencies[0]?.id : agencyId}>{agencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.name}</option>)}</select><ErrorText value={allocationForm.errors.agency_id} /></label>
-        <label>Адрес<select name="property_id" defaultValue=""><option value="">Выберите адрес</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select><ErrorText value={allocationForm.errors.property_id} /></label>
-        <label>Комната<select name="room_id" defaultValue=""><option value="">Весь адрес</option>{[...new Map(inventory.filter(item => item.room_id).map(item => [item.room_id!, item])).values()].map(item => <option key={item.room_id!} value={item.room_id!}>{item.property_name} · {item.room_name}</option>)}</select><input type="hidden" name="room_name" value="" /></label>
-        <label>Место<select name="bed_id" defaultValue=""><option value="">Вся комната</option>{inventory.filter(item => item.bed_id).map(item => <option key={item.bed_id!} value={item.bed_id!}>{item.property_name} · {item.room_name} · {item.bed_name}</option>)}</select><input type="hidden" name="bed_name" value="" /></label>
+        <label>Адрес<select name="property_id" value={allocationPropertyId} onChange={event => { setAllocationPropertyId(event.target.value); setAllocationRoomId('') }}><option value="">Выберите адрес</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select><ErrorText value={allocationForm.errors.property_id} /></label>
+        <label>Комната<select name="room_id" value={allocationRoomId} onChange={event => setAllocationRoomId(event.target.value)}><option value="">Весь адрес</option>{[...new Map(inventory.filter(item => item.property_id === allocationPropertyId && item.room_id).map(item => [item.room_id!, item])).values()].map(item => <option key={item.room_id!} value={item.room_id!}>{item.room_name}</option>)}</select><input type="hidden" name="room_name" value="" /></label>
+        <label>Место<select name="bed_id" defaultValue=""><option value="">Вся комната</option>{inventory.filter(item => item.room_id === allocationRoomId && item.bed_id).map(item => <option key={item.bed_id!} value={item.bed_id!}>{item.bed_name}</option>)}</select><input type="hidden" name="bed_name" value="" /></label>
         <label>Количество людей<input name="people_count" type="number" min="1" defaultValue="1" /><ErrorText value={allocationForm.errors.people_count} /></label>
         <label>Расчёт<select name="pricing_model" defaultValue="per_person"><option value="per_person">За человека</option><option value="fixed">Фиксированная сумма</option></select></label>
         <label>Цена, Kč<input name="unit_price" type="number" min="0" step="1" defaultValue="7000" /><ErrorText value={allocationForm.errors.unit_price} /></label>
