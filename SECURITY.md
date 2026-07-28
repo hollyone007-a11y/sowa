@@ -45,8 +45,8 @@ that if a code is posted somewhere it should not be.
 ## Documents and retention
 
 Resident PDF/image attachments live in the private `sowa-documents` Storage
-bucket. Only admin, manager and accountant may read metadata/files; only admin
-and manager may upload. Allowed formats are PDF, JPEG, PNG and WEBP up to 15 MB.
+bucket. Only admin and manager may read metadata/files and upload them. Accountant
+access remains limited to financial records. Allowed formats are PDF, JPEG, PNG and WEBP up to 15 MB.
 Processed QR applications use the per-address retention period and can be purged
 by an administrator. Pending applications are never removed automatically.
 
