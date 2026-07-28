@@ -1,10 +1,10 @@
 import type {
-  AuthUser, Debtor, DepositStatus, Expense, HousingApplication, PaymentMethod,
+  Agency, AgencyAllocation, AuthUser, Debtor, DepositStatus, Expense, HousingApplication, PaymentMethod,
   Period, PersonKind, Property, PublicProperty, ResidentPrivateProfile, Stay, Workspace,
 } from '../types'
 import type { Backend } from '../lib/backend'
 import type { ApprovalInput, ExpenseInput, PublicApplicationInput } from '../lib/schemas'
-import { remainingOf, statusFor, summarizeProperties } from '../lib/domain'
+import { proratedAgencyTotal, remainingOf, statusFor, summarizeProperties } from '../lib/domain'
 import { currentMonth, firstDayOf, shiftMonth } from '../lib/format'
 
 /**
@@ -63,6 +63,8 @@ interface FakeDb {
   stays: StayRow[]
   applications: HousingApplication[]
   expenses: Expense[]
+  agencies: Agency[]
+  agency_allocations: AgencyAllocation[]
 }
 
 export const fakeUsers: Array<AuthUser & { password: string }> = [
@@ -176,6 +178,8 @@ function buildDb(): FakeDb {
     expenses: [
       { id: 'exp-1', period_id: current.id, property_id: 'pr-modrany', property_name: 'Praha 4 · Modřany', category: 'utilities', amount: 9400, description: 'Электричество', incurred_on: day(5) },
     ],
+    agencies: [],
+    agency_allocations: [],
   }
 }
 
@@ -313,6 +317,8 @@ export function createFakeBackend(): FakeBackend {
         stays,
         debtors: historicDebtors(period),
         expenses: db.expenses.filter((expense) => expense.period_id === period.id),
+        agencies: db.agencies.filter((agency) => agency.status === 'active'),
+        agency_allocations: db.agency_allocations.filter((allocation) => allocation.period_id === period.id),
       }
     },
 
@@ -563,6 +569,32 @@ export function createFakeBackend(): FakeBackend {
 
     async deleteExpense(expenseId) {
       db.expenses = db.expenses.filter((item) => item.id !== expenseId)
+    },
+
+    async createAgency(input) {
+      db.agencies.push({ id: uid('agency'), name: input.name, company_id: input.company_id || null, contact_name: input.contact_name || null, phone: input.phone || null, email: input.email || null, note: input.note || null, status: 'active' })
+    },
+
+    async createAgencyAllocation(periodId, input) {
+      assertOpen(periodId)
+      const period = db.periods.find((item) => item.id === periodId)
+      const agency = db.agencies.find((item) => item.id === input.agency_id)
+      const property = db.properties.find((item) => item.id === input.property_id)
+      if (!period || !agency || !property) throw new Error('Агентура или адрес не найдены')
+      const conflict = db.agency_allocations.some((item) => item.period_id === periodId && item.property_id === input.property_id && (!item.room_name || !input.room_name || (item.room_name.toLowerCase() === input.room_name.toLowerCase() && (!item.bed_name || !input.bed_name || item.bed_name.toLowerCase() === input.bed_name.toLowerCase()))))
+      if (conflict) throw new Error('Это жильё уже закреплено за другой агентурой в выбранном месяце')
+      const monthStart = new Date(Date.UTC(period.year, period.month - 1, 1))
+      const monthEnd = new Date(Date.UTC(period.year, period.month, 0))
+      const start = new Date(`${input.start_date}T00:00:00Z`) > monthStart ? new Date(`${input.start_date}T00:00:00Z`) : monthStart
+      const end = new Date(`${input.end_date}T00:00:00Z`) < monthEnd ? new Date(`${input.end_date}T00:00:00Z`) : monthEnd
+      const billableDays = end < start ? 0 : Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
+      db.agency_allocations.push({ id: uid('allocation'), period_id: periodId, agency_id: agency.id, agency_name: agency.name, property_id: property.id, property_name: property.name, full_address: property.full_address, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, billable_days: billableDays, days_in_month: monthEnd.getUTCDate(), total_amount: proratedAgencyTotal(input.people_count, input.unit_price, input.pricing_model, input.start_date, input.end_date, period.year, period.month), note: input.note || null })
+    },
+
+    async deleteAgencyAllocation(allocationId) {
+      const allocation = db.agency_allocations.find((item) => item.id === allocationId)
+      if (allocation) assertOpen(allocation.period_id)
+      db.agency_allocations = db.agency_allocations.filter((item) => item.id !== allocationId)
     },
   }
 }
