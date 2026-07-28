@@ -634,6 +634,7 @@ export default function App() {
             load={backend.getPrivateProfile}
             loadAttachments={backend.listAttachments}
             uploadAttachment={backend.uploadAttachment}
+            openAttachment={backend.getAttachmentUrl}
           />
         </Modal>
       )}
