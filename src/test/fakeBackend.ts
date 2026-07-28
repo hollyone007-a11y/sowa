@@ -658,5 +658,6 @@ export function createFakeBackend(): FakeBackend {
     async purgeExpiredApplications() { return 0 },
     async listAttachments() { return [] },
     async createAttachmentMetadata() {},
+    async uploadAttachment() {},
   }
 }
