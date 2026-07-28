@@ -1,9 +1,10 @@
 import type {
-  AuthUser, HousingApplication, PublicProperty, ResidentPrivateProfile, Workspace,
+  AppProfile, AuditEntry, AuthUser, EntityAttachment, HousingApplication, PublicProperty, ResidentPrivateProfile, Workspace,
 } from '../types'
 import type {
   ApprovalInput, ExpenseInput, PropertyInput, PublicApplicationInput,
   ResidentInput, StayEditInput, AgencyInput, AgencyAllocationInput,
+  AgencyPaymentInput, BedInput, DepositTransactionInput, RoomInput,
 } from './schemas'
 import { isSupabaseConfigured } from './supabase'
 import { supabaseBackend } from './api'
@@ -31,6 +32,9 @@ export interface Backend {
   copyPreviousMonth(year: number, month: number, excludeDeparted: boolean): Promise<number>
   getPrivateProfile(personId: string): Promise<ResidentPrivateProfile>
   deleteStay(stayId: string): Promise<void>
+  createRoom(input: RoomInput): Promise<void>
+  createBed(input: BedInput): Promise<void>
+  recordDeposit(stayId: string, input: DepositTransactionInput): Promise<void>
 
   // Self-service onboarding: a QR code at the door leads to a public form,
   // and staff turn the resulting application into a stay.
@@ -48,6 +52,15 @@ export interface Backend {
   createAgency(input: AgencyInput): Promise<void>
   createAgencyAllocation(periodId: string, input: AgencyAllocationInput): Promise<void>
   deleteAgencyAllocation(allocationId: string): Promise<void>
+  recordAgencyPayment(periodId: string, input: AgencyPaymentInput): Promise<void>
+  copyAgencyPreviousMonth(year: number, month: number): Promise<number>
+
+  listProfiles(): Promise<AppProfile[]>
+  updateUserRole(userId: string, role: AppProfile['role']): Promise<void>
+  listAudit(limit?: number): Promise<AuditEntry[]>
+  purgeExpiredApplications(): Promise<number>
+  listAttachments(entityType: EntityAttachment['entity_type'], entityId: string): Promise<EntityAttachment[]>
+  createAttachmentMetadata(input: Omit<EntityAttachment, 'id' | 'created_at'>): Promise<void>
 }
 
 export const backend: Backend = supabaseBackend
