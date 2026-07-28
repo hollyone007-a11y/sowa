@@ -4,6 +4,8 @@ export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'tracking'
 export type DepositStatus = 'none' | 'paid' | 'returned' | 'applied'
 export type PersonKind = 'employee' | 'external'
 export type AgencyPricingModel = 'per_person' | 'fixed'
+export type LedgerEntryKind = 'paid' | 'refunded' | 'applied'
+export type AgencyPaymentStatus = 'empty' | 'unpaid' | 'partial' | 'paid'
 
 export interface AuthUser {
   id: string
@@ -25,6 +27,8 @@ export interface Property {
   status: 'active' | 'closed'
   /** Token behind the public QR link; only staff roles can read it. */
   public_token: string | null
+  qr_auto_approve: boolean
+  application_retention_days: number
   /** Residents living here in the selected period. */
   occupied: number
   /** Unpaid remainder for the selected period. */
@@ -55,6 +59,8 @@ export interface Stay {
   payment_status: PaymentStatus
   deposit_status: DepositStatus
   comment: string | null
+  agency_id: string | null
+  agency_name: string | null
 }
 
 export interface Period {
@@ -82,6 +88,11 @@ export interface Workspace {
   expenses: Expense[]
   agencies: Agency[]
   agency_allocations: AgencyAllocation[]
+  inventory: InventorySlot[]
+  agency_financials: AgencyFinancialSummary[]
+  agency_payments: AgencyPayment[]
+  deposit_transactions: DepositTransaction[]
+  payments: PaymentEntry[]
 }
 
 export interface DashboardMetrics {
@@ -102,6 +113,10 @@ export interface DashboardMetrics {
   expenses: number
   /** collected - rentCost - expenses. */
   margin: number
+  /** Accrual result: billed - rent - expenses. */
+  operatingProfit: number
+  /** Cash result: collected - rent - expenses. */
+  cashFlow: number
 }
 
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
@@ -151,6 +166,37 @@ export interface ResidentPrivateProfile {
   ukraine_registration: string | null
 }
 
+export interface Room {
+  id: string
+  property_id: string
+  name: string
+  capacity: number
+}
+
+export interface Bed {
+  id: string
+  room_id: string
+  name: string
+  is_active: boolean
+}
+
+export interface InventorySlot {
+  period_id: string
+  property_id: string
+  property_name: string
+  full_address: string
+  room_id: string | null
+  room_name: string | null
+  room_capacity: number | null
+  bed_id: string | null
+  bed_name: string | null
+  bed_active: boolean | null
+  stay_id: string | null
+  resident_name: string | null
+  agency_id: string | null
+  agency_name: string | null
+}
+
 export interface Agency {
   id: string
   name: string
@@ -181,4 +227,74 @@ export interface AgencyAllocation {
   days_in_month: number
   total_amount: number
   note: string | null
+  room_id: string | null
+  bed_id: string | null
+}
+
+export interface AgencyFinancialSummary {
+  period_id: string
+  agency_id: string
+  agency_name: string
+  billed: number
+  paid: number
+  debt: number
+  payment_status: AgencyPaymentStatus
+}
+
+export interface AgencyPayment {
+  id: string
+  period_id: string
+  agency_id: string
+  amount: number
+  paid_on: string
+  method: 'bank' | 'cash' | 'salary' | 'other'
+  note: string | null
+}
+
+export interface PaymentEntry {
+  id: string
+  stay_id: string
+  period_id: string
+  amount: number
+  method: PaymentMethod
+  paid_at: string
+  note: string | null
+}
+
+export interface DepositTransaction {
+  id: string
+  stay_id: string
+  period_id: string
+  kind: LedgerEntryKind
+  amount: number
+  occurred_on: string
+  note: string | null
+}
+
+export interface AppProfile {
+  id: string
+  display_name: string | null
+  role: AppRole
+}
+
+export interface AuditEntry {
+  id: number
+  table_name: string
+  record_id: string | null
+  operation: string
+  old_data: Record<string, unknown> | null
+  new_data: Record<string, unknown> | null
+  changed_by: string | null
+  changed_at: string
+}
+
+export interface EntityAttachment {
+  id: string
+  entity_type: 'person' | 'stay' | 'property' | 'agency' | 'expense' | 'agency_payment'
+  entity_id: string
+  file_name: string
+  storage_path: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
 }

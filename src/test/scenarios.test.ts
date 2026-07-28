@@ -4,7 +4,7 @@ import { applyPayment, prepareMonthCopy, proratedAgencyTotal, remainingOf, summa
 import { calculateMetrics } from '../lib/metrics'
 import { can } from '../lib/permissions'
 import { staysToCsv } from '../lib/csv'
-import { currentMonth, shiftMonth } from '../lib/format'
+import { currentMonth, firstDayOf, shiftMonth } from '../lib/format'
 import { looksLikeAnonKey, looksLikeProjectUrl } from '../lib/supabase'
 import { createFakeBackend, fakeProperties, fakeUsers, type FakeBackend } from './fakeBackend'
 import type { Property, Stay } from '../types'
@@ -15,12 +15,14 @@ const stay: Stay = {
   person_kind: 'employee', property_name: 'Praha 4', room_name: 'Комната 3', bed_name: 'Место B',
   move_in: '2026-08-01', move_out: null, price: 6500, paid_amount: 0,
   payment_method: 'salary', payment_status: 'unpaid', deposit_status: 'none', comment: null,
+  agency_id: null, agency_name: null,
 }
 
 const property: Property = {
   id: 'property-1', name: 'Praha 4', full_address: 'Komořanská 42', contact_name: null,
   phone: null, email: null, capacity: 4, monthly_cost: 20000, status: 'active',
-  public_token: null, occupied: 0, debt: 0, collected: 0,
+  public_token: null, qr_auto_approve: false, application_retention_days: 90,
+  occupied: 0, debt: 0, collected: 0,
 }
 
 describe('валидация форм', () => {
@@ -268,5 +270,63 @@ describe('ведомость агентуры', () => {
 
   it('не переносит начисление в другой месяц', () => {
     expect(proratedAgencyTotal(2, 7500, 'per_person', '2026-07-01', '2026-07-31', 2026, 8)).toBe(0)
+  })
+})
+
+
+describe('операционный контур v2', () => {
+  let backend: FakeBackend
+
+  beforeEach(() => {
+    backend = createFakeBackend()
+  })
+
+  it('разделяет операционный профит и денежный поток', () => {
+    const metrics = calculateMetrics([property], [{ ...stay, paid_amount: 3000, payment_status: 'partial' }], [], [])
+    expect(metrics.operatingProfit).toBe(-13500)
+    expect(metrics.cashFlow).toBe(-17000)
+  })
+
+  it('хранит операции по залогу отдельным журналом', async () => {
+    const now = currentMonth()
+    const workspace = await backend.loadWorkspace(now.year, now.month)
+    const target = workspace.stays[0]
+    await backend.recordDeposit(target.id, {
+      kind: 'paid', amount: 5000, occurred_on: `${now.year}-${String(now.month).padStart(2, '0')}-05`, note: 'Наличными',
+    })
+    const after = await backend.loadWorkspace(now.year, now.month)
+    expect(after.deposit_transactions).toHaveLength(1)
+    expect(after.stays.find((item) => item.id === target.id)?.deposit_status).toBe('paid')
+  })
+
+  it('копирует ведомость агентуры и записывает её оплату', async () => {
+    const now = currentMonth()
+    const current = await backend.loadWorkspace(now.year, now.month)
+    await backend.createAgency({ name: 'Agentura Test', company_id: '', contact_name: '', phone: '', email: '', note: '' })
+    const withAgency = await backend.loadWorkspace(now.year, now.month)
+    await backend.createAgencyAllocation(current.period.id, {
+      agency_id: withAgency.agencies[0].id, property_id: current.properties[0].id,
+      room_id: '', bed_id: '', room_name: '', bed_name: '', people_count: 2,
+      pricing_model: 'per_person', unit_price: 7000,
+      start_date: firstDayOf(now.year, now.month),
+      end_date: new Date(Date.UTC(now.year, now.month, 0)).toISOString().slice(0, 10), note: '',
+    })
+    const next = shiftMonth(now.year, now.month, 1)
+    expect(await backend.copyAgencyPreviousMonth(next.year, next.month)).toBe(1)
+    const target = await backend.loadWorkspace(next.year, next.month)
+    await backend.recordAgencyPayment(target.period.id, {
+      agency_id: withAgency.agencies[0].id, amount: 5000,
+      paid_on: firstDayOf(next.year, next.month), method: 'bank', note: '',
+    })
+    expect((await backend.loadWorkspace(next.year, next.month)).agency_payments).toHaveLength(1)
+  })
+
+  it('позволяет администратору управлять ролями', async () => {
+    const profiles = await backend.listProfiles()
+    const viewer = profiles.find((item) => item.role === 'viewer')
+    expect(viewer).toBeDefined()
+    await backend.updateUserRole(viewer!.id, 'manager')
+    expect((await backend.listProfiles()).find((item) => item.id === viewer!.id)?.role).toBe('manager')
+    await backend.updateUserRole(viewer!.id, 'viewer')
   })
 })

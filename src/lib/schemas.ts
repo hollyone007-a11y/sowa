@@ -10,6 +10,8 @@ export const propertySchema = z.object({
   email: z.string().trim().email('Неверный e-mail').or(z.literal('')).default(''),
   capacity: z.coerce.number().int('Целое число').min(1, 'Минимум 1 место').max(500),
   monthly_cost: z.coerce.number().min(0, 'Не может быть отрицательной'),
+  qr_auto_approve: z.preprocess((value) => value === 'on' || value === true, z.boolean()).default(false),
+  application_retention_days: z.coerce.number().int().min(30).max(730).default(90),
 })
 
 export const residentSchema = z.object({
@@ -18,6 +20,7 @@ export const residentSchema = z.object({
   phone: optionalText,
   workplace: optionalText,
   person_kind: z.enum(['employee', 'external']),
+  agency_id: optionalText,
   property_id: optionalText,
   room_name: optionalText,
   bed_name: optionalText,
@@ -34,6 +37,7 @@ export const residentSchema = z.object({
 /** Editing an existing stay: identity stays put, placement and money can move. */
 export const stayEditSchema = z.object({
   property_id: optionalText,
+  agency_id: optionalText,
   room_name: optionalText,
   bed_name: optionalText,
   price: z.coerce.number().min(0, 'Не может быть отрицательной'),
@@ -89,6 +93,8 @@ export const agencySchema = z.object({
 export const agencyAllocationSchema = z.object({
   agency_id: z.string().min(1, 'Выберите агентуру'),
   property_id: z.string().min(1, 'Выберите адрес'),
+  room_id: optionalText,
+  bed_id: optionalText,
   room_name: z.string().trim().max(120).optional().default(''),
   bed_name: z.string().trim().max(120).optional().default(''),
   people_count: z.coerce.number().int().min(1, 'Минимум 1 человек').max(500),
@@ -101,6 +107,33 @@ export const agencyAllocationSchema = z.object({
   message: 'Дата окончания раньше начала', path: ['end_date'],
 })
 
+
+export const roomSchema = z.object({
+  property_id: z.string().min(1, 'Выберите адрес'),
+  name: z.string().trim().min(1, 'Введите название').max(120),
+  capacity: z.coerce.number().int().min(1).max(100),
+})
+
+export const bedSchema = z.object({
+  room_id: z.string().min(1, 'Выберите комнату'),
+  name: z.string().trim().min(1, 'Введите название').max(120),
+})
+
+export const agencyPaymentSchema = z.object({
+  agency_id: z.string().min(1, 'Выберите агентуру'),
+  amount: z.coerce.number().positive('Сумма должна быть больше нуля'),
+  paid_on: z.string().min(1, 'Укажите дату'),
+  method: z.enum(['bank', 'cash', 'salary', 'other']),
+  note: z.string().trim().max(500).optional().default(''),
+})
+
+export const depositTransactionSchema = z.object({
+  kind: z.enum(['paid', 'refunded', 'applied']),
+  amount: z.coerce.number().positive('Сумма должна быть больше нуля'),
+  occurred_on: z.string().min(1, 'Укажите дату'),
+  note: z.string().trim().max(500).optional().default(''),
+})
+
 export type PropertyInput = z.infer<typeof propertySchema>
 export type ResidentInput = z.infer<typeof residentSchema>
 export type StayEditInput = z.infer<typeof stayEditSchema>
@@ -109,3 +142,8 @@ export type ApprovalInput = z.infer<typeof approvalSchema>
 export type ExpenseInput = z.infer<typeof expenseSchema>
 export type AgencyInput = z.infer<typeof agencySchema>
 export type AgencyAllocationInput = z.infer<typeof agencyAllocationSchema>
+
+export type RoomInput = z.infer<typeof roomSchema>
+export type BedInput = z.infer<typeof bedSchema>
+export type AgencyPaymentInput = z.infer<typeof agencyPaymentSchema>
+export type DepositTransactionInput = z.infer<typeof depositTransactionSchema>

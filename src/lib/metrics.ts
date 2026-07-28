@@ -28,6 +28,8 @@ export function calculateMetrics(
     rentCost,
     expenses: extraCost,
     margin: collected - rentCost - extraCost,
+    operatingProfit: stays.reduce((sum, stay) => sum + expectedFrom(stay), 0) - rentCost - extraCost,
+    cashFlow: collected - rentCost - extraCost,
   }
 }
 

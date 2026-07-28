@@ -32,11 +32,23 @@ functions granted to `anon`, and they are the entire anonymous surface. An
 application form is a spam target, so it is defended in three places:
 
 - a honeypot field that a person never sees and a bot fills in;
-- a 24-hour duplicate guard on (address, passport number);
+- a 30-day normalized passport duplicate guard across all addresses;
 - length and content checks repeated as table constraints.
+
+Automatic admission is disabled by default. If enabled for an address, it only
+creates a zero-price tracking stay while capacity remains; a manager must assign
+a canonical room/place and confirm the price.
 
 Rotating an address's QR code invalidates every printed copy immediately. Do
 that if a code is posted somewhere it should not be.
+
+## Documents and retention
+
+Resident PDF/image attachments live in the private `sowa-documents` Storage
+bucket. Only admin and manager may read metadata/files and upload them. Accountant
+access remains limited to financial records. Allowed formats are PDF, JPEG, PNG and WEBP up to 15 MB.
+Processed QR applications use the per-address retention period and can be purged
+by an administrator. Pending applications are never removed automatically.
 
 ## Known limitations
 

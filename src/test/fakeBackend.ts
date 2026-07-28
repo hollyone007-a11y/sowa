@@ -1,6 +1,6 @@
 import type {
-  Agency, AgencyAllocation, AuthUser, Debtor, DepositStatus, Expense, HousingApplication, PaymentMethod,
-  Period, PersonKind, Property, PublicProperty, ResidentPrivateProfile, Stay, Workspace,
+  Agency, AgencyAllocation, AgencyPayment, AuthUser, Debtor, DepositStatus, DepositTransaction, Expense,
+  HousingApplication, PaymentMethod, Period, PersonKind, Property, PublicProperty, ResidentPrivateProfile, Stay, Workspace,
 } from '../types'
 import type { Backend } from '../lib/backend'
 import type { ApprovalInput, ExpenseInput, PublicApplicationInput } from '../lib/schemas'
@@ -28,6 +28,8 @@ interface PropertyRow {
   monthly_cost: number
   status: 'active' | 'closed'
   public_token: string
+  qr_auto_approve: boolean
+  application_retention_days: number
 }
 
 interface PersonRow {
@@ -53,6 +55,7 @@ interface StayRow {
   payment_method: PaymentMethod
   deposit_status: DepositStatus
   comment: string | null
+  agency_id: string | null
 }
 
 interface FakeDb {
@@ -65,6 +68,8 @@ interface FakeDb {
   expenses: Expense[]
   agencies: Agency[]
   agency_allocations: AgencyAllocation[]
+  agency_payments: AgencyPayment[]
+  deposit_transactions: DepositTransaction[]
 }
 
 export const fakeUsers: Array<AuthUser & { password: string }> = [
@@ -75,9 +80,9 @@ export const fakeUsers: Array<AuthUser & { password: string }> = [
 ]
 
 export const fakeProperties: PropertyRow[] = [
-  { id: 'pr-modrany', name: 'Praha 4 · Modřany', full_address: 'Komořanská 42, Praha 4', contact_name: 'Jan Novák', phone: '+420 777 123 456', email: null, capacity: 14, monthly_cost: 86000, status: 'active', public_token: 'token-modrany' },
-  { id: 'pr-cernymost', name: 'Praha 9 · Černý Most', full_address: 'Bryksova 18, Praha 9', contact_name: null, phone: null, email: null, capacity: 10, monthly_cost: 62000, status: 'active', public_token: 'token-cernymost' },
-  { id: 'pr-zidenice', name: 'Brno · Židenice', full_address: 'Gajdošova 31, Brno', contact_name: null, phone: null, email: null, capacity: 8, monthly_cost: 48000, status: 'active', public_token: 'token-zidenice' },
+  { id: 'pr-modrany', name: 'Praha 4 · Modřany', full_address: 'Komořanská 42, Praha 4', contact_name: 'Jan Novák', phone: '+420 777 123 456', email: null, capacity: 14, monthly_cost: 86000, status: 'active', qr_auto_approve: false, application_retention_days: 90, public_token: 'token-modrany' },
+  { id: 'pr-cernymost', name: 'Praha 9 · Černý Most', full_address: 'Bryksova 18, Praha 9', contact_name: null, phone: null, email: null, capacity: 10, monthly_cost: 62000, status: 'active', qr_auto_approve: false, application_retention_days: 90, public_token: 'token-cernymost' },
+  { id: 'pr-zidenice', name: 'Brno · Židenice', full_address: 'Gajdošova 31, Brno', contact_name: null, phone: null, email: null, capacity: 8, monthly_cost: 48000, status: 'active', qr_auto_approve: false, application_retention_days: 90, public_token: 'token-zidenice' },
 ]
 
 /** [имя, фамилия, тип, адрес, комната, место, цена, способ] */
@@ -152,6 +157,7 @@ function buildDb(): FakeDb {
         payment_method: method,
         deposit_status: 'none',
         comment: null,
+        agency_id: null,
       })
     })
   })
@@ -180,6 +186,8 @@ function buildDb(): FakeDb {
     ],
     agencies: [],
     agency_allocations: [],
+    agency_payments: [],
+    deposit_transactions: [],
   }
 }
 
@@ -218,6 +226,8 @@ export function createFakeBackend(): FakeBackend {
       payment_status: statusFor(row.price, row.paid_amount, row.payment_method),
       deposit_status: row.deposit_status,
       comment: row.comment,
+      agency_id: row.agency_id,
+      agency_name: db.agencies.find((item) => item.id === row.agency_id)?.name ?? null,
     }
   }
 
@@ -319,6 +329,11 @@ export function createFakeBackend(): FakeBackend {
         expenses: db.expenses.filter((expense) => expense.period_id === period.id),
         agencies: db.agencies.filter((agency) => agency.status === 'active'),
         agency_allocations: db.agency_allocations.filter((allocation) => allocation.period_id === period.id),
+        inventory: [],
+        agency_financials: [],
+        agency_payments: db.agency_payments.filter((payment) => payment.period_id === period.id),
+        deposit_transactions: db.deposit_transactions.filter((item) => item.period_id === period.id),
+        payments: [],
       }
     },
 
@@ -334,6 +349,8 @@ export function createFakeBackend(): FakeBackend {
         monthly_cost: input.monthly_cost,
         status: 'active',
         public_token: uid('token'),
+        qr_auto_approve: input.qr_auto_approve,
+        application_retention_days: input.application_retention_days,
       })
     },
 
@@ -348,6 +365,8 @@ export function createFakeBackend(): FakeBackend {
         email: input.email || null,
         capacity: input.capacity,
         monthly_cost: input.monthly_cost,
+        qr_auto_approve: input.qr_auto_approve,
+        application_retention_days: input.application_retention_days,
       })
     },
 
@@ -384,6 +403,7 @@ export function createFakeBackend(): FakeBackend {
         payment_method: input.payment_method,
         deposit_status: input.deposit_status,
         comment: input.comment || null,
+        agency_id: input.agency_id || null,
       })
     },
 
@@ -402,6 +422,7 @@ export function createFakeBackend(): FakeBackend {
         deposit_status: input.deposit_status,
         move_out: input.move_out || null,
         comment: input.comment || null,
+        agency_id: input.agency_id || null,
       })
     },
 
@@ -413,6 +434,8 @@ export function createFakeBackend(): FakeBackend {
       if (row.paid_amount + amount > row.price) throw new Error('Оплата превышает стоимость')
       row.paid_amount += amount
     },
+
+    async reversePayment() {},
 
     async copyPreviousMonth(year, month, excludeDeparted) {
       const target = ensurePeriod(year, month)
@@ -534,6 +557,7 @@ export function createFakeBackend(): FakeBackend {
         payment_method: input.payment_method,
         deposit_status: 'none',
         comment: 'Добавлен через QR-анкету',
+        agency_id: null,
       })
       application.status = 'approved'
     },
@@ -575,6 +599,8 @@ export function createFakeBackend(): FakeBackend {
       db.agencies.push({ id: uid('agency'), name: input.name, company_id: input.company_id || null, contact_name: input.contact_name || null, phone: input.phone || null, email: input.email || null, note: input.note || null, status: 'active' })
     },
 
+    async updateAgency(agencyId, input) { const agency=db.agencies.find(item=>item.id===agencyId); if(agency) Object.assign(agency,input) },
+
     async createAgencyAllocation(periodId, input) {
       assertOpen(periodId)
       const period = db.periods.find((item) => item.id === periodId)
@@ -588,13 +614,55 @@ export function createFakeBackend(): FakeBackend {
       const start = new Date(`${input.start_date}T00:00:00Z`) > monthStart ? new Date(`${input.start_date}T00:00:00Z`) : monthStart
       const end = new Date(`${input.end_date}T00:00:00Z`) < monthEnd ? new Date(`${input.end_date}T00:00:00Z`) : monthEnd
       const billableDays = end < start ? 0 : Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
-      db.agency_allocations.push({ id: uid('allocation'), period_id: periodId, agency_id: agency.id, agency_name: agency.name, property_id: property.id, property_name: property.name, full_address: property.full_address, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, billable_days: billableDays, days_in_month: monthEnd.getUTCDate(), total_amount: proratedAgencyTotal(input.people_count, input.unit_price, input.pricing_model, input.start_date, input.end_date, period.year, period.month), note: input.note || null })
+      db.agency_allocations.push({ id: uid('allocation'), period_id: periodId, agency_id: agency.id, agency_name: agency.name, property_id: property.id, property_name: property.name, full_address: property.full_address, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, billable_days: billableDays, days_in_month: monthEnd.getUTCDate(), total_amount: proratedAgencyTotal(input.people_count, input.unit_price, input.pricing_model, input.start_date, input.end_date, period.year, period.month), note: input.note || null, room_id: input.room_id || null, bed_id: input.bed_id || null })
     },
+
+    async updateAgencyAllocation(allocationId, input) { const row=db.agency_allocations.find(item=>item.id===allocationId); if(row) Object.assign(row,input) },
 
     async deleteAgencyAllocation(allocationId) {
       const allocation = db.agency_allocations.find((item) => item.id === allocationId)
       if (allocation) assertOpen(allocation.period_id)
       db.agency_allocations = db.agency_allocations.filter((item) => item.id !== allocationId)
     },
+
+    async createRoom() {},
+    async createBed() {},
+
+    async recordDeposit(stayId, input) {
+      const stay = requireStay(stayId)
+      assertOpen(stay.period_id)
+      db.deposit_transactions.push({ id: uid('deposit'), stay_id: stayId, period_id: stay.period_id, kind: input.kind, amount: input.amount, occurred_on: input.occurred_on, note: input.note || null })
+      stay.deposit_status = input.kind === 'paid' ? 'paid' : input.kind === 'refunded' ? 'returned' : 'applied'
+    },
+
+    async recordAgencyPayment(periodId, input) {
+      assertOpen(periodId)
+      db.agency_payments.push({ id: uid('agency-payment'), period_id: periodId, agency_id: input.agency_id, amount: input.amount, paid_on: input.paid_on, method: input.method, note: input.note || null })
+    },
+
+    async copyAgencyPreviousMonth(year, month) {
+      const target = ensurePeriod(year, month)
+      assertOpen(target.id)
+      const previous = shiftMonth(year, month, -1)
+      const source = db.periods.find((item) => item.year === previous.year && item.month === previous.month)
+      if (!source) return 0
+      const rows = db.agency_allocations.filter((item) => item.period_id === source.id)
+      for (const row of rows) db.agency_allocations.push({ ...row, id: uid('allocation'), period_id: target.id, start_date: firstDayOf(year, month), end_date: new Date(Date.UTC(year, month, 0)).toISOString().slice(0,10) })
+      return rows.length
+    },
+
+    async listProfiles() {
+      return fakeUsers.map(({ id, display_name, role }) => ({ id, display_name, role }))
+    },
+    async updateUserRole(userId, role) {
+      const user = fakeUsers.find((item) => item.id === userId)
+      if (user) user.role = role
+    },
+    async listAudit() { return [] },
+    async purgeExpiredApplications() { return 0 },
+    async listAttachments() { return [] },
+    async createAttachmentMetadata() {},
+    async uploadAttachment() {},
+    async getAttachmentUrl() { return '#' },
   }
 }

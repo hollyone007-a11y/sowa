@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Building2, ChevronLeft, ChevronRight, CircleDollarSign, Download, FileInput, FileSpreadsheet,
-  LogOut, Moon, Plus, QrCode, Search, Sun, UsersRound,
+  BedDouble, Building2, ChevronLeft, ChevronRight, CircleDollarSign, Download, FileInput, FileSpreadsheet,
+  LogOut, Moon, Plus, QrCode, Search, Settings, Sun, UsersRound,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { Wordmark } from './ui/Logo'
@@ -10,23 +10,24 @@ import { Setup } from './ui/Setup'
 import { PublicJoin } from './ui/PublicJoin'
 import { Confirm, Loader, Modal, Toast } from './ui/primitives'
 import {
-  ApprovalForm, ExpenseForm, PaymentForm, ProfileSheet, PropertyForm,
+  ApprovalForm, DepositTransactionForm, ExpenseForm, PaymentForm, ProfileSheet, PropertyForm,
   ResidentForm, StayEditForm,
 } from './ui/forms'
 import { ResidentsView } from './ui/ResidentsView'
 import { ApplicationsView, QrView } from './ui/onboarding'
 import { AgencyStatementsView } from './ui/AgencyStatementsView'
+import { AdministrationView, InventoryView } from './ui/OperationsView'
 import { CarryOverBanner, FinanceView, PropertiesView, StatStrip } from './ui/views'
 import { backend, configured } from './lib/backend'
 import { can, roleLabels } from './lib/permissions'
 import { calculateMetrics } from './lib/metrics'
 import { remainingOf } from './lib/domain'
 import { downloadStaysCsv } from './lib/csv'
-import { currentMonth, firstDayOf, monthLabel, shiftMonth } from './lib/format'
+import { currentMonth, firstDayOf, money, monthLabel, shiftMonth } from './lib/format'
 import type { Permission } from './lib/permissions'
-import type { AgencyAllocation, AuthUser, Expense, HousingApplication, Property, Stay, Workspace } from './types'
+import type { AgencyAllocation, AppProfile, AuditEntry, AuthUser, Expense, HousingApplication, Property, Stay, Workspace } from './types'
 
-type Tab = 'residents' | 'properties' | 'applications' | 'finance' | 'agencies' | 'qr'
+type Tab = 'residents' | 'properties' | 'inventory' | 'applications' | 'finance' | 'agencies' | 'qr' | 'admin'
 type FilterKey = 'all' | 'debt' | 'unassigned' | 'cash' | 'salary' | 'external' | 'departed'
 
 type ModalState =
@@ -34,6 +35,7 @@ type ModalState =
   | { kind: 'resident' }
   | { kind: 'payment'; stay: Stay }
   | { kind: 'edit'; stay: Stay }
+  | { kind: 'deposit'; stay: Stay }
   | { kind: 'profile'; stay: Stay }
   | { kind: 'delete'; stay: Stay }
   | { kind: 'approve'; application: HousingApplication }
@@ -63,10 +65,12 @@ const FILTERS: Array<[FilterKey, string]> = [
 const TABS: Array<[Tab, string, typeof UsersRound, Permission]> = [
   ['residents', 'Жильцы', UsersRound, 'view'],
   ['properties', 'Адреса', Building2, 'view'],
+  ['inventory', 'Комнаты', BedDouble, 'view'],
   ['applications', 'Заявки', FileInput, 'manage_residents'],
   ['finance', 'Финансы', CircleDollarSign, 'view_finance'],
   ['agencies', 'Агентуры', FileSpreadsheet, 'view_finance'],
   ['qr', 'QR-коды', QrCode, 'manage_properties'],
+  ['admin', 'Управление', Settings, 'manage_users'],
 ]
 
 function useTheme() {
@@ -110,6 +114,8 @@ export default function App() {
   const [modal, setModal] = useState<ModalState>(null)
   const [previousCount, setPreviousCount] = useState(0)
   const [applications, setApplications] = useState<HousingApplication[]>([])
+  const [profiles, setProfiles] = useState<AppProfile[]>([])
+  const [audit, setAudit] = useState<AuditEntry[]>([])
   const [theme, toggleTheme] = useTheme()
 
   // --- session -------------------------------------------------------------
@@ -144,6 +150,14 @@ export default function App() {
         setApplications(await backend.listApplications().catch(() => []))
       } else {
         setApplications([])
+      }
+      if (user.role === 'admin') {
+        const [nextProfiles, nextAudit] = await Promise.all([backend.listProfiles(), backend.listAudit()])
+        setProfiles(nextProfiles)
+        setAudit(nextAudit)
+      } else {
+        setProfiles([])
+        setAudit([])
       }
     } catch (cause) {
       setWorkspace(null)
@@ -422,6 +436,7 @@ export default function App() {
                   }).catch(() => undefined)
                 }}
                 onEdit={(stay) => setModal({ kind: 'edit', stay })}
+                onDeposit={(stay) => setModal({ kind: 'deposit', stay })}
                 onProfile={(stay) => setModal({ kind: 'profile', stay })}
                 onDelete={(stay) => setModal({ kind: 'delete', stay })}
                 emptyAction={
@@ -453,6 +468,13 @@ export default function App() {
             />
           ))}
 
+        {tab === 'inventory' && workspace && (
+          <InventoryView slots={workspace.inventory} properties={properties} periodClosed={periodClosed}
+            onCreateRoom={async input => { await run(async () => { await backend.createRoom(input); return 'Комната создана' }) }}
+            onCreateBed={async input => { await run(async () => { await backend.createBed(input); return 'Место создано' }) }}
+          />
+        )}
+
         {tab === 'applications' && can(role, 'manage_residents') && (
           <ApplicationsView
             applications={applications}
@@ -475,10 +497,21 @@ export default function App() {
         )}
 
         {tab === 'agencies' && can(role, 'view_finance') && workspace && (
-          <AgencyStatementsView agencies={agencies} allocations={agencyAllocations} properties={properties} role={role} periodId={workspace.period.id} monthTitle={title} defaultStart={firstDayOf(month.year, month.month)} defaultEnd={new Date(Date.UTC(month.year, month.month, 0)).toISOString().slice(0, 10)} periodClosed={periodClosed}
+          <AgencyStatementsView agencies={agencies} allocations={agencyAllocations} financials={workspace.agency_financials} payments={workspace.agency_payments} inventory={workspace.inventory} properties={properties} residents={stays} role={role} periodId={workspace.period.id} monthTitle={title} defaultStart={firstDayOf(month.year, month.month)} defaultEnd={new Date(Date.UTC(month.year, month.month, 0)).toISOString().slice(0, 10)} periodClosed={periodClosed}
             onCreateAgency={async (input) => { await run(async () => { await backend.createAgency(input); return `Агентура «${input.name}» создана` }) }}
+            onUpdateAgency={async (agencyId, input) => { await run(async () => { await backend.updateAgency(agencyId,input); return 'Агентура обновлена' }) }}
             onCreateAllocation={async (periodId, input) => { await run(async () => { await backend.createAgencyAllocation(periodId, input); return 'Строка добавлена в ведомость' }) }}
+            onUpdateAllocation={async (allocationId, input) => { await run(async () => { await backend.updateAgencyAllocation(allocationId,input); return 'Строка ведомости обновлена' }) }}
             onDeleteAllocation={(allocation) => setModal({ kind: 'delete-allocation', allocation })}
+            onRecordPayment={async (periodId, input) => { await run(async () => { await backend.recordAgencyPayment(periodId, input); return 'Оплата агентуры записана' }) }}
+            onCopyPrevious={async () => { await run(async () => { const copied = await backend.copyAgencyPreviousMonth(month.year, month.month); return `Перенесено строк агентур: ${copied}` }) }}
+          />
+        )}
+
+        {tab === 'admin' && role === 'admin' && (
+          <AdministrationView profiles={profiles} audit={audit}
+            onRoleChange={async (userId, nextRole) => { await run(async () => { await backend.updateUserRole(userId, nextRole); return 'Роль обновлена' }) }}
+            onPurge={async () => { await run(async () => { const removed = await backend.purgeExpiredApplications(); return `Удалено просроченных анкет: ${removed}` }) }}
           />
         )}
 
@@ -527,6 +560,7 @@ export default function App() {
         <Modal title="Новый жилец" subtitle={`Период: ${title}`} onClose={() => setModal(null)} wide>
           <ResidentForm
             properties={properties}
+            agencies={agencies}
             stays={stays}
             defaultPropertyId={selectedProperty === 'all' ? undefined : selectedProperty}
             defaultMoveIn={firstDayOf(month.year, month.month)}
@@ -554,6 +588,10 @@ export default function App() {
               setModal(null)
             }}
           />
+          <div className="ledger-history">
+            <h3>История оплат</h3>
+            {workspace?.payments.filter(item => item.stay_id === modal.stay.id).map(item => <article key={item.id}><span><strong>{money(item.amount)}</strong><small>{item.paid_at.slice(0,10)} · {item.method}</small></span>{role === 'admin' && <button type="button" className="button tiny ghost danger-text" onClick={() => { if (window.confirm('Отменить эту оплату?')) void run(async () => { await backend.reversePayment(item.id,'Отменено администратором'); return 'Оплата отменена' }).then(() => setModal(null)) }}>Отменить</button>}</article>)}
+          </div>
         </Modal>
       )}
 
@@ -562,6 +600,7 @@ export default function App() {
           <StayEditForm
             stay={modal.stay}
             properties={properties}
+            agencies={agencies}
             stays={stays}
             onSave={async (input) => {
               const stay = modal.stay
@@ -575,12 +614,27 @@ export default function App() {
         </Modal>
       )}
 
+
+      {modal?.kind === 'deposit' && (
+        <Modal title="Операция по залогу" subtitle={modal.stay.full_name} onClose={() => setModal(null)}>
+          <DepositTransactionForm stay={modal.stay} onSave={async input => {
+            const stay = modal.stay
+            setModal(null)
+            await run(async () => { await backend.recordDeposit(stay.id,input); return 'Операция по залогу записана' })
+          }}/>
+          <div className="ledger-history"><h3>История залога</h3>{workspace?.deposit_transactions.filter(item => item.stay_id === modal.stay.id).map(item => <article key={item.id}><span><strong>{money(item.amount)}</strong><small>{item.occurred_on} · {item.kind}</small></span><small>{item.note}</small></article>)}</div>
+        </Modal>
+      )}
+
       {modal?.kind === 'profile' && (
         <Modal title="Анкета жильца" subtitle={modal.stay.full_name} onClose={() => setModal(null)}>
           <ProfileSheet
             stay={modal.stay}
             canView={can(role, 'view_private_profiles')}
             load={backend.getPrivateProfile}
+            loadAttachments={backend.listAttachments}
+            uploadAttachment={backend.uploadAttachment}
+            openAttachment={backend.getAttachmentUrl}
           />
         </Modal>
       )}

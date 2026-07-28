@@ -1,9 +1,10 @@
 import type {
-  AuthUser, HousingApplication, PublicProperty, ResidentPrivateProfile, Workspace,
+  AppProfile, AuditEntry, AuthUser, EntityAttachment, HousingApplication, PublicProperty, ResidentPrivateProfile, Workspace,
 } from '../types'
 import type {
   ApprovalInput, ExpenseInput, PropertyInput, PublicApplicationInput,
   ResidentInput, StayEditInput, AgencyInput, AgencyAllocationInput,
+  AgencyPaymentInput, BedInput, DepositTransactionInput, RoomInput,
 } from './schemas'
 import { isSupabaseConfigured } from './supabase'
 import { supabaseBackend } from './api'
@@ -28,9 +29,13 @@ export interface Backend {
   createResident(periodId: string, input: ResidentInput): Promise<void>
   updateStay(stayId: string, input: StayEditInput): Promise<void>
   recordPayment(stayId: string, amount: number): Promise<void>
+  reversePayment(paymentId: string, reason?: string): Promise<void>
   copyPreviousMonth(year: number, month: number, excludeDeparted: boolean): Promise<number>
   getPrivateProfile(personId: string): Promise<ResidentPrivateProfile>
   deleteStay(stayId: string): Promise<void>
+  createRoom(input: RoomInput): Promise<void>
+  createBed(input: BedInput): Promise<void>
+  recordDeposit(stayId: string, input: DepositTransactionInput): Promise<void>
 
   // Self-service onboarding: a QR code at the door leads to a public form,
   // and staff turn the resulting application into a stay.
@@ -46,8 +51,21 @@ export interface Backend {
   createExpense(periodId: string, input: ExpenseInput): Promise<void>
   deleteExpense(expenseId: string): Promise<void>
   createAgency(input: AgencyInput): Promise<void>
+  updateAgency(agencyId: string, input: AgencyInput): Promise<void>
   createAgencyAllocation(periodId: string, input: AgencyAllocationInput): Promise<void>
+  updateAgencyAllocation(allocationId: string, input: AgencyAllocationInput): Promise<void>
   deleteAgencyAllocation(allocationId: string): Promise<void>
+  recordAgencyPayment(periodId: string, input: AgencyPaymentInput): Promise<void>
+  copyAgencyPreviousMonth(year: number, month: number): Promise<number>
+
+  listProfiles(): Promise<AppProfile[]>
+  updateUserRole(userId: string, role: AppProfile['role']): Promise<void>
+  listAudit(limit?: number): Promise<AuditEntry[]>
+  purgeExpiredApplications(): Promise<number>
+  listAttachments(entityType: EntityAttachment['entity_type'], entityId: string): Promise<EntityAttachment[]>
+  createAttachmentMetadata(input: Omit<EntityAttachment, 'id' | 'created_at'>): Promise<void>
+  uploadAttachment(entityType: EntityAttachment['entity_type'], entityId: string, file: File): Promise<void>
+  getAttachmentUrl(storagePath: string): Promise<string>
 }
 
 export const backend: Backend = supabaseBackend

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  Building2, Check, ClipboardList, MoreHorizontal, Pencil, Trash2, Wallet,
+  Building2, Check, ClipboardList, Coins, MoreHorizontal, Pencil, Trash2, Wallet,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { Empty } from './primitives'
@@ -44,7 +44,7 @@ function groupByAddress(stays: Stay[], properties: Property[]): Group[] {
 }
 
 export function ResidentsView({
-  stays, properties, role, grouped, onPay, onQuickPay, onEdit, onProfile, onDelete, emptyAction,
+  stays, properties, role, grouped, onPay, onQuickPay, onEdit, onDeposit, onProfile, onDelete, emptyAction,
 }: {
   stays: Stay[]
   properties: Property[]
@@ -53,6 +53,7 @@ export function ResidentsView({
   onPay: (stay: Stay) => void
   onQuickPay: (stay: Stay) => void
   onEdit: (stay: Stay) => void
+  onDeposit: (stay: Stay) => void
   onProfile: (stay: Stay) => void
   onDelete: (stay: Stay) => void
   emptyAction?: React.ReactNode
@@ -112,6 +113,7 @@ export function ResidentsView({
                 onPay={choose(onPay)}
                 onQuickPay={onQuickPay}
                 onEdit={choose(onEdit)}
+                onDeposit={choose(onDeposit)}
                 onProfile={choose(onProfile)}
                 onDelete={choose(onDelete)}
               />
@@ -124,7 +126,7 @@ export function ResidentsView({
 }
 
 function ResidentRow({
-  stay, role, menuOpen, onToggleMenu, onPay, onQuickPay, onEdit, onProfile, onDelete,
+  stay, role, menuOpen, onToggleMenu, onPay, onQuickPay, onEdit, onDeposit, onProfile, onDelete,
 }: {
   stay: Stay
   role: AppRole
@@ -133,6 +135,7 @@ function ResidentRow({
   onPay: (stay: Stay) => void
   onQuickPay: (stay: Stay) => void
   onEdit: (stay: Stay) => void
+  onDeposit: (stay: Stay) => void
   onProfile: (stay: Stay) => void
   onDelete: (stay: Stay) => void
 }) {
@@ -151,7 +154,7 @@ function ResidentRow({
         <small>
           {stay.phone || 'Телефон не указан'}
           {' · '}
-          {stay.person_kind === 'external' ? 'Внешний' : stay.workplace || 'Сотрудник'}
+          {stay.person_kind === 'external' ? 'Внешний' : stay.workplace || 'Сотрудник'}{stay.agency_name ? ` · ${stay.agency_name}` : ''}
         </small>
       </div>
 
@@ -205,6 +208,9 @@ function ResidentRow({
               <button type="button" onClick={() => onProfile(stay)}>
                 <ClipboardList size={16} /> Анкета и печать
               </button>
+            )}
+            {can(role, 'manage_payments') && (
+              <button type="button" onClick={() => onDeposit(stay)}><Coins size={16} /> Операция по залогу</button>
             )}
             {can(role, 'manage_residents') && (
               <button type="button" onClick={() => onEdit(stay)}>
