@@ -401,3 +401,31 @@ where public.has_role(array['admin','manager','accountant']::public.app_role[])
 group by p.id,pr.id;
 
 grant select on public.stay_details,public.property_period_summary,public.property_financial_summary to authenticated;
+
+
+create or replace view public.agency_statement_rows
+with (security_invoker=true) as
+select allocation.id,allocation.period_id,allocation.agency_id,agency.name agency_name,
+  allocation.property_id,property.name property_name,property.full_address,
+  coalesce(room.name,allocation.room_name) room_name,
+  coalesce(bed.name,allocation.bed_name) bed_name,
+  allocation.people_count,allocation.pricing_model,allocation.unit_price,
+  greatest(allocation.start_date,make_date(period.year,period.month,1)) start_date,
+  least(allocation.end_date,(make_date(period.year,period.month,1)+interval '1 month - 1 day')::date) end_date,
+  (least(allocation.end_date,(make_date(period.year,period.month,1)+interval '1 month - 1 day')::date)
+   - greatest(allocation.start_date,make_date(period.year,period.month,1))+1)::integer billable_days,
+  extract(day from (make_date(period.year,period.month,1)+interval '1 month - 1 day'))::integer days_in_month,
+  round(allocation.unit_price * case when allocation.pricing_model='per_person' then allocation.people_count else 1 end
+    * (least(allocation.end_date,(make_date(period.year,period.month,1)+interval '1 month - 1 day')::date)
+       - greatest(allocation.start_date,make_date(period.year,period.month,1))+1)
+    / extract(day from (make_date(period.year,period.month,1)+interval '1 month - 1 day')),0) total_amount,
+  allocation.note,allocation.room_id,allocation.bed_id
+from public.agency_allocations allocation
+join public.agencies agency on agency.id=allocation.agency_id
+join public.properties property on property.id=allocation.property_id
+join public.periods period on period.id=allocation.period_id
+left join public.rooms room on room.id=allocation.room_id
+left join public.beds bed on bed.id=allocation.bed_id
+where allocation.archived_at is null;
+
+grant select on public.agency_statement_rows to authenticated;
