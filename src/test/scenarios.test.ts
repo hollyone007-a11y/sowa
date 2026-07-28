@@ -272,3 +272,61 @@ describe('ведомость агентуры', () => {
     expect(proratedAgencyTotal(2, 7500, 'per_person', '2026-07-01', '2026-07-31', 2026, 8)).toBe(0)
   })
 })
+
+
+describe('операционный контур v2', () => {
+  let backend: FakeBackend
+
+  beforeEach(() => {
+    backend = createFakeBackend()
+  })
+
+  it('разделяет операционный профит и денежный поток', () => {
+    const metrics = calculateMetrics([property], [{ ...stay, paid_amount: 3000, payment_status: 'partial' }], [], [])
+    expect(metrics.operatingProfit).toBe(-13500)
+    expect(metrics.cashFlow).toBe(-17000)
+  })
+
+  it('хранит операции по залогу отдельным журналом', async () => {
+    const now = currentMonth()
+    const workspace = await backend.loadWorkspace(now.year, now.month)
+    const target = workspace.stays[0]
+    await backend.recordDeposit(target.id, {
+      kind: 'paid', amount: 5000, occurred_on: `${now.year}-${String(now.month).padStart(2, '0')}-05`, note: 'Наличными',
+    })
+    const after = await backend.loadWorkspace(now.year, now.month)
+    expect(after.deposit_transactions).toHaveLength(1)
+    expect(after.stays.find((item) => item.id === target.id)?.deposit_status).toBe('paid')
+  })
+
+  it('копирует ведомость агентуры и записывает её оплату', async () => {
+    const now = currentMonth()
+    const current = await backend.loadWorkspace(now.year, now.month)
+    await backend.createAgency({ name: 'Agentura Test', company_id: '', contact_name: '', phone: '', email: '', note: '' })
+    const withAgency = await backend.loadWorkspace(now.year, now.month)
+    await backend.createAgencyAllocation(current.period.id, {
+      agency_id: withAgency.agencies[0].id, property_id: current.properties[0].id,
+      room_id: '', bed_id: '', room_name: '', bed_name: '', people_count: 2,
+      pricing_model: 'per_person', unit_price: 7000,
+      start_date: firstDayOf(now.year, now.month),
+      end_date: new Date(Date.UTC(now.year, now.month, 0)).toISOString().slice(0, 10), note: '',
+    })
+    const next = shiftMonth(now.year, now.month, 1)
+    expect(await backend.copyAgencyPreviousMonth(next.year, next.month)).toBe(1)
+    const target = await backend.loadWorkspace(next.year, next.month)
+    await backend.recordAgencyPayment(target.period.id, {
+      agency_id: withAgency.agencies[0].id, amount: 5000,
+      paid_on: firstDayOf(next.year, next.month), method: 'bank', note: '',
+    })
+    expect((await backend.loadWorkspace(next.year, next.month)).agency_payments).toHaveLength(1)
+  })
+
+  it('позволяет администратору управлять ролями', async () => {
+    const profiles = await backend.listProfiles()
+    const viewer = profiles.find((item) => item.role === 'viewer')
+    expect(viewer).toBeDefined()
+    await backend.updateUserRole(viewer!.id, 'manager')
+    expect((await backend.listProfiles()).find((item) => item.id === viewer!.id)?.role).toBe('manager')
+    await backend.updateUserRole(viewer!.id, 'viewer')
+  })
+})
