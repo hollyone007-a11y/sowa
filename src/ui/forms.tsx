@@ -498,13 +498,14 @@ export function DepositTransactionForm({
 }
 
 export function ProfileSheet({
-  stay, canView, load, loadAttachments, uploadAttachment,
+  stay, canView, load, loadAttachments, uploadAttachment, openAttachment,
 }: {
   stay: Stay
   canView: boolean
   load: (personId: string) => Promise<ResidentPrivateProfile>
   loadAttachments: (entityType: 'person', entityId: string) => Promise<EntityAttachment[]>
   uploadAttachment: (entityType: 'person', entityId: string, file: File) => Promise<void>
+  openAttachment: (storagePath: string) => Promise<string>
 }) {
   const [profile, setProfile] = useState<ResidentPrivateProfile | null>(null)
   const [error, setError] = useState('')
@@ -601,7 +602,7 @@ export function ProfileSheet({
 
       <section className="attachments no-print">
         <h3>Документы</h3>
-        {attachments.map(item => <div key={item.id}><span><strong>{item.file_name}</strong><small>{Math.ceil(item.size_bytes/1024)} КБ</small></span></div>)}
+        {attachments.map(item => <div key={item.id}><span><strong>{item.file_name}</strong><small>{Math.ceil(item.size_bytes/1024)} КБ</small></span><button type="button" className="button ghost" onClick={() => { const tab = window.open('about:blank','_blank'); if (tab) tab.opener = null; void openAttachment(item.storage_path).then(url => { if (tab) tab.location.href = url; else window.location.href = url }).catch(cause => { tab?.close(); setError(cause instanceof Error ? cause.message : 'Не удалось открыть документ') }) }}>Открыть</button></div>)}
         <label className="button ghost wide">Выбрать PDF или изображение<input type="file" accept=".pdf,image/jpeg,image/png,image/webp" hidden onChange={event => setSelectedFile(event.target.files?.[0] ?? null)}/></label>
         {selectedFile && <button type="button" className="button primary wide" disabled={uploading} onClick={() => { setUploading(true); void uploadAttachment('person',stay.person_id,selectedFile).then(() => loadAttachments('person',stay.person_id)).then(setAttachments).then(() => setSelectedFile(null)).catch(cause => setError(cause instanceof Error ? cause.message : 'Не удалось загрузить')).finally(() => setUploading(false)) }}>{uploading ? 'Загрузка…' : `Загрузить ${selectedFile.name}`}</button>}
       </section>
