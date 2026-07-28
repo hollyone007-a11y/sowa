@@ -5,7 +5,7 @@ import { downloadAgencyStatementCsv } from '../lib/csv'
 import { formatDate, money } from '../lib/format'
 import { can } from '../lib/permissions'
 import { useZodForm } from './useZodForm'
-import type { Agency, AgencyAllocation, AgencyFinancialSummary, AgencyPayment, AppRole, InventorySlot, Property } from '../types'
+import type { Agency, AgencyAllocation, AgencyFinancialSummary, AgencyPayment, AppRole, InventorySlot, Property, Stay } from '../types'
 import type { AgencyAllocationInput, AgencyInput, AgencyPaymentInput } from '../lib/schemas'
 
 function ErrorText({ value }: { value?: string }) {
@@ -13,7 +13,7 @@ function ErrorText({ value }: { value?: string }) {
 }
 
 export function AgencyStatementsView({
-  agencies, allocations, financials, payments, inventory, properties, role, periodId, monthTitle, defaultStart, defaultEnd,
+  agencies, allocations, financials, payments, inventory, properties, residents, role, periodId, monthTitle, defaultStart, defaultEnd,
   periodClosed, onCreateAgency, onCreateAllocation, onDeleteAllocation, onRecordPayment, onCopyPrevious,
 }: {
   agencies: Agency[]
@@ -22,6 +22,7 @@ export function AgencyStatementsView({
   payments: AgencyPayment[]
   inventory: InventorySlot[]
   properties: Property[]
+  residents: Stay[]
   role: AppRole
   periodId: string
   monthTitle: string
@@ -145,13 +146,13 @@ export function AgencyStatementsView({
         <div className="statement-table-wrap">
           <table className="statement-table">
             <thead><tr><th>Č.</th><th>Počet osob</th><th>Adresa</th><th>Celkem</th><th className="no-print" /></tr></thead>
-            <tbody>{rows.map((row, index) => <tr key={row.id}>
+            <tbody>{rows.map((row, index) => { const actualPeople = residents.filter(stay => !stay.move_out && stay.agency_id === row.agency_id && stay.property_id === row.property_id && (!row.room_id || stay.room_id === row.room_id) && (!row.bed_id || stay.bed_id === row.bed_id)).length; return <tr key={row.id}>
               <td data-label="№">{index + 1}</td>
               <td data-label="Людей">{row.people_count} {row.people_count === 1 ? 'osoba' : 'osoby'}</td>
-              <td data-label="Адрес"><strong>{row.full_address}</strong><span>{row.room_name || 'Весь адрес'}{row.bed_name ? ` · ${row.bed_name}` : ''}</span><small>{row.pricing_model === 'per_person' ? `${money(row.unit_price)}/os` : `фиксировано ${money(row.unit_price)}`}{row.billable_days < row.days_in_month ? ` · ${formatDate(row.start_date)}–${formatDate(row.end_date)}` : ''}</small>{row.note && <em>{row.note}</em>}</td>
+              <td data-label="Адрес"><strong>{row.full_address}</strong><span>{row.room_name || 'Весь адрес'}{row.bed_name ? ` · ${row.bed_name}` : ''}</span><small>{row.pricing_model === 'per_person' ? `${money(row.unit_price)}/os` : `фиксировано ${money(row.unit_price)}`}{row.billable_days < row.days_in_month ? ` · ${formatDate(row.start_date)}–${formatDate(row.end_date)}` : ''}</small>{row.note && <em>{row.note}</em>}{actualPeople !== row.people_count && <em className="danger-text">Фактически жильцов: {actualPeople}</em>}</td>
               <td data-label="Сумма">{money(row.total_amount)}</td>
               <td className="no-print">{can(role, 'manage_properties') && !periodClosed && <button type="button" className="icon-button danger" aria-label="Удалить строку" onClick={() => onDeleteAllocation(row)}><Trash2 size={16} /></button>}</td>
-            </tr>)}</tbody>
+            </tr>})}</tbody>
             <tfoot><tr><td colSpan={3}>Celkem</td><td>{money(total)}</td><td className="no-print" /></tr></tfoot>
           </table>
         </div>
