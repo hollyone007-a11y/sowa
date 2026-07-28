@@ -78,6 +78,9 @@ function ApplicationRow({
   onApprove?: (application: HousingApplication) => void
   onReject?: (application: HousingApplication) => void
 }) {
+  const [passportVisible, setPassportVisible] = useState(false)
+  const maskedPassport = `•••• ${application.passport_number.slice(-4)}`
+
   return (
     <li className={clsx('application-row', `is-${application.status}`)}>
       <div className="application-identity">
@@ -96,9 +99,8 @@ function ApplicationRow({
       </div>
 
       <div className="application-doc">
-        <span>
-          Паспорт {application.passport_series ?? ''} {application.passport_number}
-        </span>
+        <span>Паспорт {application.passport_series ?? ''} {passportVisible ? application.passport_number : maskedPassport}</span>
+        <button type="button" className="link-button" onClick={() => setPassportVisible(value => !value)}>{passportVisible ? 'Скрыть' : 'Показать'}</button>
         <small>{application.ukraine_registration}</small>
       </div>
 
