@@ -92,6 +92,7 @@ export interface Workspace {
   agency_financials: AgencyFinancialSummary[]
   agency_payments: AgencyPayment[]
   deposit_transactions: DepositTransaction[]
+  payments: PaymentEntry[]
 }
 
 export interface DashboardMetrics {
@@ -247,6 +248,16 @@ export interface AgencyPayment {
   amount: number
   paid_on: string
   method: 'bank' | 'cash' | 'salary' | 'other'
+  note: string | null
+}
+
+export interface PaymentEntry {
+  id: string
+  stay_id: string
+  period_id: string
+  amount: number
+  method: PaymentMethod
+  paid_at: string
   note: string | null
 }
 
