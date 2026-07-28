@@ -1,0 +1,338 @@
+-- Operational v2: canonical inventory, agency receivables, deposits, archives,
+-- QR controls, attachments metadata and administration. No production seed data.
+
+create type public.ledger_entry_kind as enum ('paid', 'refunded', 'applied');
+create type public.attachment_entity as enum ('person', 'stay', 'property', 'agency', 'expense', 'agency_payment');
+
+alter table public.properties
+  add column qr_auto_approve boolean not null default false,
+  add column application_retention_days integer not null default 90
+    check (application_retention_days between 30 and 730);
+
+alter table public.stays
+  add column agency_id uuid references public.agencies(id) on delete set null,
+  add column archived_at timestamptz,
+  add column archived_by uuid references auth.users(id);
+
+alter table public.property_expenses
+  add column archived_at timestamptz,
+  add column archived_by uuid references auth.users(id);
+
+alter table public.agency_allocations
+  add column room_id uuid references public.rooms(id) on delete restrict,
+  add column bed_id uuid references public.beds(id) on delete restrict,
+  add column archived_at timestamptz,
+  add column archived_by uuid references auth.users(id);
+
+-- Best-effort canonicalisation of existing text allocations.
+update public.agency_allocations allocation
+set room_id = room.id
+from public.rooms room
+where room.property_id = allocation.property_id
+  and lower(room.name) = lower(allocation.room_name)
+  and allocation.room_name is not null
+  and allocation.room_id is null;
+
+update public.agency_allocations allocation
+set bed_id = bed.id
+from public.beds bed
+where bed.room_id = allocation.room_id
+  and lower(bed.name) = lower(allocation.bed_name)
+  and allocation.bed_name is not null
+  and allocation.bed_id is null;
+
+create table public.agency_payments (
+  id uuid primary key default gen_random_uuid(),
+  period_id uuid not null references public.periods(id) on delete restrict,
+  agency_id uuid not null references public.agencies(id) on delete restrict,
+  amount numeric(12,2) not null check (amount > 0),
+  paid_on date not null,
+  method text not null default 'bank' check (method in ('bank','cash','salary','other')),
+  note text,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  archived_at timestamptz,
+  archived_by uuid references auth.users(id),
+  check (note is null or length(note) <= 500)
+);
+
+create table public.deposit_transactions (
+  id uuid primary key default gen_random_uuid(),
+  stay_id uuid not null,
+  period_id uuid not null,
+  kind public.ledger_entry_kind not null,
+  amount numeric(12,2) not null check (amount > 0),
+  occurred_on date not null,
+  note text,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  foreign key (stay_id, period_id) references public.stays(id, period_id) on delete restrict,
+  check (note is null or length(note) <= 500)
+);
+
+create table public.entity_attachments (
+  id uuid primary key default gen_random_uuid(),
+  entity_type public.attachment_entity not null,
+  entity_id uuid not null,
+  file_name text not null,
+  storage_path text not null unique,
+  mime_type text not null,
+  size_bytes bigint not null check (size_bytes between 1 and 15728640),
+  uploaded_by uuid not null references auth.users(id),
+  created_at timestamptz not null default now(),
+  archived_at timestamptz,
+  check (length(trim(file_name)) between 1 and 240),
+  check (mime_type in ('application/pdf','image/jpeg','image/png','image/webp'))
+);
+
+create index stays_period_agency_active_idx
+  on public.stays(period_id, agency_id) where archived_at is null;
+create index agency_allocations_canonical_space_idx
+  on public.agency_allocations(period_id, property_id, room_id, bed_id)
+  where archived_at is null;
+create index agency_payments_period_agency_idx
+  on public.agency_payments(period_id, agency_id) where archived_at is null;
+create index deposit_transactions_stay_idx
+  on public.deposit_transactions(stay_id, occurred_on desc);
+create index entity_attachments_entity_idx
+  on public.entity_attachments(entity_type, entity_id) where archived_at is null;
+
+alter table public.agency_payments enable row level security;
+alter table public.deposit_transactions enable row level security;
+alter table public.entity_attachments enable row level security;
+
+create policy agency_payments_read on public.agency_payments for select to authenticated
+using (public.has_role(array['admin','manager','accountant']::public.app_role[]));
+create policy agency_payments_manage on public.agency_payments for all to authenticated
+using (public.has_role(array['admin','manager']::public.app_role[]))
+with check (public.has_role(array['admin','manager']::public.app_role[]));
+
+create policy deposit_transactions_read on public.deposit_transactions for select to authenticated
+using (public.has_role(array['admin','manager','accountant']::public.app_role[]));
+create policy deposit_transactions_manage on public.deposit_transactions for all to authenticated
+using (public.has_role(array['admin','manager']::public.app_role[]))
+with check (public.has_role(array['admin','manager']::public.app_role[]));
+
+create policy entity_attachments_read on public.entity_attachments for select to authenticated
+using (public.has_role(array['admin','manager','accountant']::public.app_role[]));
+create policy entity_attachments_manage on public.entity_attachments for all to authenticated
+using (public.has_role(array['admin','manager']::public.app_role[]))
+with check (public.has_role(array['admin','manager']::public.app_role[]));
+
+grant select, insert, update on public.agency_payments to authenticated;
+grant select, insert on public.deposit_transactions to authenticated;
+grant select, insert, update on public.entity_attachments to authenticated;
+
+-- Canonical inventory. One active resident can occupy a bed in one period.
+create unique index stays_active_bed_per_period_idx
+  on public.stays(period_id, bed_id)
+  where bed_id is not null and move_out is null and archived_at is null;
+
+create or replace function public.validate_stay_inventory()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  room_property uuid;
+  bed_room uuid;
+  room_limit integer;
+  active_in_room integer;
+begin
+  if new.property_id is null and (new.room_id is not null or new.bed_id is not null) then
+    raise exception 'room requires a property';
+  end if;
+
+  if new.room_id is not null then
+    select property_id, capacity into room_property, room_limit
+    from public.rooms where id = new.room_id;
+    if room_property is distinct from new.property_id then
+      raise exception 'room does not belong to property';
+    end if;
+  end if;
+
+  if new.bed_id is not null then
+    select room_id into bed_room from public.beds where id = new.bed_id and is_active;
+    if bed_room is distinct from new.room_id then
+      raise exception 'bed does not belong to room';
+    end if;
+  end if;
+
+  if new.room_id is not null and new.move_out is null and new.archived_at is null then
+    select count(*) into active_in_room
+    from public.stays stay
+    where stay.period_id = new.period_id
+      and stay.room_id = new.room_id
+      and stay.move_out is null
+      and stay.archived_at is null
+      and stay.id is distinct from new.id;
+    if active_in_room >= room_limit then
+      raise exception 'room capacity exceeded';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger validate_stay_inventory_before_write
+before insert or update of property_id, room_id, bed_id, move_out, archived_at
+on public.stays
+for each row execute function public.validate_stay_inventory();
+
+-- Archive operations preserve financial/audit history and are reversible by SQL.
+create or replace function public.archive_stay(p_stay_id uuid)
+returns void language plpgsql security invoker set search_path = public as $$
+begin
+  if not public.has_role(array['admin']::public.app_role[]) then raise exception 'access denied'; end if;
+  if exists (select 1 from public.stays s join public.periods p on p.id=s.period_id where s.id=p_stay_id and p.is_closed)
+    then raise exception 'period is closed'; end if;
+  update public.stays set archived_at=now(), archived_by=auth.uid(), updated_at=now()
+  where id=p_stay_id and archived_at is null;
+end; $$;
+
+create or replace function public.archive_expense(p_expense_id uuid)
+returns void language plpgsql security invoker set search_path = public as $$
+begin
+  if not public.has_role(array['admin','manager']::public.app_role[]) then raise exception 'access denied'; end if;
+  if exists (select 1 from public.property_expenses e join public.periods p on p.id=e.period_id where e.id=p_expense_id and p.is_closed)
+    then raise exception 'period is closed'; end if;
+  update public.property_expenses set archived_at=now(), archived_by=auth.uid(), updated_at=now()
+  where id=p_expense_id and archived_at is null;
+end; $$;
+
+create or replace function public.archive_agency_allocation(p_allocation_id uuid)
+returns void language plpgsql security invoker set search_path = public as $$
+begin
+  if not public.has_role(array['admin','manager']::public.app_role[]) then raise exception 'access denied'; end if;
+  if exists (select 1 from public.agency_allocations a join public.periods p on p.id=a.period_id where a.id=p_allocation_id and p.is_closed)
+    then raise exception 'period is closed'; end if;
+  update public.agency_allocations set archived_at=now(), archived_by=auth.uid(), updated_at=now()
+  where id=p_allocation_id and archived_at is null;
+end; $$;
+
+create or replace function public.record_deposit_transaction(
+  p_stay_id uuid, p_kind public.ledger_entry_kind, p_amount numeric,
+  p_occurred_on date, p_note text default null
+) returns uuid language plpgsql security invoker set search_path = public as $$
+declare current_stay public.stays; result uuid;
+begin
+  if not public.has_role(array['admin','manager']::public.app_role[]) then raise exception 'access denied'; end if;
+  select * into current_stay from public.stays where id=p_stay_id and archived_at is null for update;
+  if current_stay.id is null then raise exception 'stay not found'; end if;
+  if (select is_closed from public.periods where id=current_stay.period_id) then raise exception 'period is closed'; end if;
+  insert into public.deposit_transactions(stay_id,period_id,kind,amount,occurred_on,note,created_by)
+  values(current_stay.id,current_stay.period_id,p_kind,p_amount,p_occurred_on,nullif(trim(p_note),''),auth.uid()) returning id into result;
+  update public.stays set deposit_status = case p_kind when 'paid' then 'paid' when 'refunded' then 'returned' else 'applied' end,
+    updated_at=now() where id=current_stay.id;
+  return result;
+end; $$;
+
+create or replace function public.record_agency_payment(
+  p_period_id uuid, p_agency_id uuid, p_amount numeric, p_paid_on date,
+  p_method text default 'bank', p_note text default null
+) returns uuid language plpgsql security invoker set search_path = public as $$
+declare result uuid;
+begin
+  if not public.has_role(array['admin','manager']::public.app_role[]) then raise exception 'access denied'; end if;
+  if (select is_closed from public.periods where id=p_period_id) then raise exception 'period is closed'; end if;
+  insert into public.agency_payments(period_id,agency_id,amount,paid_on,method,note,created_by)
+  values(p_period_id,p_agency_id,p_amount,p_paid_on,p_method,nullif(trim(p_note),''),auth.uid()) returning id into result;
+  return result;
+end; $$;
+
+create or replace function public.copy_agency_allocations(
+  p_source_period_id uuid, p_target_period_id uuid
+) returns integer language plpgsql security invoker set search_path = public as $$
+declare copied integer; target_start date; target_end date;
+begin
+  if not public.has_role(array['admin','manager']::public.app_role[]) then raise exception 'access denied'; end if;
+  if p_source_period_id=p_target_period_id then raise exception 'periods must differ'; end if;
+  if (select is_closed from public.periods where id=p_target_period_id) then raise exception 'target period is closed'; end if;
+  select make_date(year,month,1),(make_date(year,month,1)+interval '1 month - 1 day')::date
+  into target_start,target_end from public.periods where id=p_target_period_id;
+  insert into public.agency_allocations(period_id,agency_id,property_id,room_id,bed_id,room_name,bed_name,people_count,pricing_model,unit_price,start_date,end_date,note,created_by)
+  select p_target_period_id,agency_id,property_id,room_id,bed_id,room_name,bed_name,people_count,pricing_model,unit_price,target_start,target_end,note,auth.uid()
+  from public.agency_allocations where period_id=p_source_period_id and archived_at is null
+  on conflict do nothing;
+  get diagnostics copied=row_count; return copied;
+end; $$;
+
+create or replace function public.set_user_role(p_user_id uuid, p_role public.app_role)
+returns void language plpgsql security invoker set search_path = public as $$
+begin
+  if not public.has_role(array['admin']::public.app_role[]) then raise exception 'access denied'; end if;
+  if p_user_id=auth.uid() and p_role<>'admin' then raise exception 'cannot remove own admin role'; end if;
+  update public.profiles set role=p_role,updated_at=now() where id=p_user_id;
+end; $$;
+
+create or replace function public.purge_expired_applications()
+returns integer language plpgsql security invoker set search_path = public as $$
+declare removed integer;
+begin
+  if not public.has_role(array['admin']::public.app_role[]) then raise exception 'access denied'; end if;
+  delete from public.housing_applications application
+  using public.properties property
+  where property.id=application.property_id
+    and application.status<>'pending'
+    and application.created_at < now() - make_interval(days=>property.application_retention_days);
+  get diagnostics removed=row_count; return removed;
+end; $$;
+
+-- Read models used by the dense operational UI.
+create view public.inventory_status
+with (security_invoker=true) as
+select p.id period_id, pr.id property_id, pr.name property_name, pr.full_address,
+  r.id room_id, r.name room_name, r.capacity room_capacity,
+  b.id bed_id, b.name bed_name, b.is_active bed_active,
+  s.id stay_id, concat_ws(' ',pe.first_name,pe.last_name) resident_name,
+  s.agency_id, a.name agency_name
+from public.periods p
+cross join public.properties pr
+left join public.rooms r on r.property_id=pr.id
+left join public.beds b on b.room_id=r.id
+left join public.stays s on s.period_id=p.id and s.bed_id=b.id and s.move_out is null and s.archived_at is null
+left join public.people pe on pe.id=s.person_id
+left join public.agencies a on a.id=s.agency_id;
+
+create view public.agency_financial_summary
+with (security_invoker=true) as
+select period.id period_id, agency.id agency_id, agency.name agency_name,
+  coalesce(charges.billed,0)::numeric billed,
+  coalesce(payments.paid,0)::numeric paid,
+  greatest(coalesce(charges.billed,0)-coalesce(payments.paid,0),0)::numeric debt,
+  case when coalesce(charges.billed,0)=0 then 'empty'
+       when coalesce(payments.paid,0)=0 then 'unpaid'
+       when coalesce(payments.paid,0)<coalesce(charges.billed,0) then 'partial'
+       else 'paid' end payment_status
+from public.periods period
+cross join public.agencies agency
+left join lateral (
+  select sum(round(allocation.unit_price * case when allocation.pricing_model='per_person' then allocation.people_count else 1 end
+    * (allocation.end_date-allocation.start_date+1) / extract(day from (make_date(period.year,period.month,1)+interval '1 month - 1 day')),0)) billed
+  from public.agency_allocations allocation
+  where allocation.period_id=period.id and allocation.agency_id=agency.id and allocation.archived_at is null
+) charges on true
+left join lateral (
+  select sum(payment.amount) paid from public.agency_payments payment
+  where payment.period_id=period.id and payment.agency_id=agency.id and payment.archived_at is null
+) payments on true
+where public.has_role(array['admin','manager','accountant']::public.app_role[]);
+
+grant select on public.inventory_status, public.agency_financial_summary to authenticated;
+grant execute on function public.archive_stay(uuid) to authenticated;
+grant execute on function public.archive_expense(uuid) to authenticated;
+grant execute on function public.archive_agency_allocation(uuid) to authenticated;
+grant execute on function public.record_deposit_transaction(uuid,public.ledger_entry_kind,numeric,date,text) to authenticated;
+grant execute on function public.record_agency_payment(uuid,uuid,numeric,date,text,text) to authenticated;
+grant execute on function public.copy_agency_allocations(uuid,uuid) to authenticated;
+grant execute on function public.set_user_role(uuid,public.app_role) to authenticated;
+grant execute on function public.purge_expired_applications() to authenticated;
+
+-- Extend auditing to operational ledgers and attachment metadata.
+create trigger agency_payments_audit after insert or update or delete on public.agency_payments
+for each row execute function public.audit_changes();
+create trigger deposit_transactions_audit after insert or update or delete on public.deposit_transactions
+for each row execute function public.audit_changes();
+create trigger entity_attachments_audit after insert or update or delete on public.entity_attachments
+for each row execute function public.audit_changes();
