@@ -630,6 +630,8 @@ export default function App() {
             stay={modal.stay}
             canView={can(role, 'view_private_profiles')}
             load={backend.getPrivateProfile}
+            loadAttachments={backend.listAttachments}
+            uploadAttachment={backend.uploadAttachment}
           />
         </Modal>
       )}
