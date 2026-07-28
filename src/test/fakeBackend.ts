@@ -333,6 +333,7 @@ export function createFakeBackend(): FakeBackend {
         agency_financials: [],
         agency_payments: db.agency_payments.filter((payment) => payment.period_id === period.id),
         deposit_transactions: db.deposit_transactions.filter((item) => item.period_id === period.id),
+        payments: [],
       }
     },
 
@@ -433,6 +434,8 @@ export function createFakeBackend(): FakeBackend {
       if (row.paid_amount + amount > row.price) throw new Error('Оплата превышает стоимость')
       row.paid_amount += amount
     },
+
+    async reversePayment() {},
 
     async copyPreviousMonth(year, month, excludeDeparted) {
       const target = ensurePeriod(year, month)
