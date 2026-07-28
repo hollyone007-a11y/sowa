@@ -394,8 +394,18 @@ export const supabaseBackend: Backend = {
     if (error) throw readable(error)
   },
 
+  async updateAgency(agencyId, input) {
+    const { error } = await db().from('agencies').update({ name:input.name, company_id:input.company_id||null, contact_name:input.contact_name||null, phone:input.phone||null, email:input.email||null, note:input.note||null, updated_at:new Date().toISOString() }).eq('id',agencyId)
+    if (error) throw readable(error)
+  },
+
   async createAgencyAllocation(periodId, input) {
     const { error } = await db().from('agency_allocations').insert({ period_id: periodId, agency_id: input.agency_id, property_id: input.property_id, room_id: input.room_id || null, bed_id: input.bed_id || null, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, note: input.note || null, created_by: (await db().auth.getUser()).data.user?.id ?? null })
+    if (error) throw readable(error)
+  },
+
+  async updateAgencyAllocation(allocationId, input) {
+    const { error } = await db().from('agency_allocations').update({ agency_id:input.agency_id, property_id:input.property_id, room_id:input.room_id||null, bed_id:input.bed_id||null, room_name:input.room_name||null, bed_name:input.bed_name||null, people_count:input.people_count, pricing_model:input.pricing_model, unit_price:input.unit_price, start_date:input.start_date, end_date:input.end_date, note:input.note||null }).eq('id',allocationId)
     if (error) throw readable(error)
   },
 
