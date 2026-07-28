@@ -77,9 +77,35 @@ export const expenseSchema = z.object({
   description: z.string().trim().max(500, 'Слишком длинно').optional().default(''),
 })
 
+export const agencySchema = z.object({
+  name: z.string().trim().min(2, 'Введите название').max(160),
+  company_id: z.string().trim().max(40).optional().default(''),
+  contact_name: z.string().trim().max(160).optional().default(''),
+  phone: z.string().trim().max(40).optional().default(''),
+  email: z.string().trim().email('Неверный e-mail').or(z.literal('')).default(''),
+  note: z.string().trim().max(500).optional().default(''),
+})
+
+export const agencyAllocationSchema = z.object({
+  agency_id: z.string().min(1, 'Выберите агентуру'),
+  property_id: z.string().min(1, 'Выберите адрес'),
+  room_name: z.string().trim().max(120).optional().default(''),
+  bed_name: z.string().trim().max(120).optional().default(''),
+  people_count: z.coerce.number().int().min(1, 'Минимум 1 человек').max(500),
+  pricing_model: z.enum(['per_person', 'fixed']),
+  unit_price: z.coerce.number().min(0, 'Цена не может быть отрицательной'),
+  start_date: z.string().min(1, 'Укажите начало'),
+  end_date: z.string().min(1, 'Укажите окончание'),
+  note: z.string().trim().max(500).optional().default(''),
+}).refine((value) => value.end_date >= value.start_date, {
+  message: 'Дата окончания раньше начала', path: ['end_date'],
+})
+
 export type PropertyInput = z.infer<typeof propertySchema>
 export type ResidentInput = z.infer<typeof residentSchema>
 export type StayEditInput = z.infer<typeof stayEditSchema>
 export type PublicApplicationInput = z.infer<typeof publicApplicationSchema>
 export type ApprovalInput = z.infer<typeof approvalSchema>
 export type ExpenseInput = z.infer<typeof expenseSchema>
+export type AgencyInput = z.infer<typeof agencySchema>
+export type AgencyAllocationInput = z.infer<typeof agencyAllocationSchema>
