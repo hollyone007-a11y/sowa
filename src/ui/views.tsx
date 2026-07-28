@@ -149,10 +149,16 @@ export function FinanceView({
         <Stat label="Аренда объектов" value={money(metrics.rentCost)} hint="Расход агентства" />
         <Stat label="Прочие расходы" value={money(metrics.expenses)} hint="Коммуналка, ремонт, услуги" />
         <Stat
-          label="Разница"
-          value={money(metrics.margin)}
-          hint="Собрано минус аренда и расходы"
-          tone={metrics.margin >= 0 ? 'positive' : 'negative'}
+          label="Операционный профит"
+          value={money(metrics.operatingProfit)}
+          hint="Начислено минус аренда и расходы"
+          tone={metrics.operatingProfit >= 0 ? 'positive' : 'negative'}
+        />
+        <Stat
+          label="Денежный поток"
+          value={money(metrics.cashFlow)}
+          hint="Получено минус аренда и расходы"
+          tone={metrics.cashFlow >= 0 ? 'positive' : 'negative'}
         />
       </section>
 
