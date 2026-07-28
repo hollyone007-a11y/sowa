@@ -4,13 +4,13 @@ import { Field } from './primitives'
 import { LogoMark } from './Logo'
 import { useZodForm } from './useZodForm'
 import {
-  approvalSchema, expenseSchema, propertySchema, residentSchema, stayEditSchema,
-  type ApprovalInput, type ExpenseInput, type PropertyInput, type ResidentInput,
+  approvalSchema, depositTransactionSchema, expenseSchema, propertySchema, residentSchema, stayEditSchema,
+  type ApprovalInput, type DepositTransactionInput, type ExpenseInput, type PropertyInput, type ResidentInput,
   type StayEditInput,
 } from '../lib/schemas'
 import { remainingOf } from '../lib/domain'
 import { categoryText, depositText, formatDate, methodText, money, today } from '../lib/format'
-import type { HousingApplication, Property, ResidentPrivateProfile, Stay } from '../types'
+import type { Agency, HousingApplication, Property, ResidentPrivateProfile, Stay } from '../types'
 
 /** Room and bed names already used at an address, so nobody retypes them. */
 function placementSuggestions(stays: Stay[], propertyId: string) {
@@ -31,6 +31,7 @@ function PlacementFields({
   properties, stays, defaultPropertyId = '', defaultRoom = '', defaultBed = '',
 }: {
   properties: Property[]
+  agencies: Agency[]
   stays: Stay[]
   defaultPropertyId?: string
   defaultRoom?: string
@@ -132,13 +133,17 @@ export function PropertyForm({
       >
         <input name="monthly_cost" type="number" min="0" step="100" defaultValue={property?.monthly_cost ?? 0} />
       </Field>
+      <Field label="Хранение анкет, дней" error={errors.application_retention_days}>
+        <input name="application_retention_days" type="number" min="30" max="730" defaultValue={property?.application_retention_days ?? 90} />
+      </Field>
+      <div className="field checkbox-field"><label><input name="qr_auto_approve" type="checkbox" defaultChecked={property?.qr_auto_approve ?? false} /> Автоматически принимать QR-заявки при наличии места</label></div>
       <SubmitRow busy={busy} error={formError} label={property ? 'Сохранить адрес' : 'Создать адрес'} />
     </form>
   )
 }
 
 export function ResidentForm({
-  properties, stays, defaultPropertyId, defaultMoveIn, onSave,
+  properties, agencies, stays, defaultPropertyId, defaultMoveIn, onSave,
 }: {
   properties: Property[]
   stays: Stay[]
@@ -167,12 +172,18 @@ export function ResidentForm({
           <option value="external">Внешний человек</option>
         </select>
       </Field>
+      <Field label="Агентура">
+        <select name="agency_id" defaultValue=""><option value="">Без агентуры</option>{agencies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      </Field>
       <Field label="Дата заезда" error={errors.move_in}>
         <input name="move_in" type="date" defaultValue={defaultMoveIn} />
       </Field>
 
       <PlacementFields properties={properties} stays={stays} defaultPropertyId={defaultPropertyId} />
 
+      <Field label="Агентура">
+        <select name="agency_id" defaultValue={stay.agency_id ?? ''}><option value="">Без агентуры</option>{agencies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      </Field>
       <Field label="Стоимость в месяц" error={errors.price}>
         <input name="price" type="number" min="0" step="100" defaultValue={0} />
       </Field>
@@ -215,10 +226,11 @@ export function ResidentForm({
 }
 
 export function StayEditForm({
-  stay, properties, stays, onSave,
+  stay, properties, agencies, stays, onSave,
 }: {
   stay: Stay
   properties: Property[]
+  agencies: Agency[]
   stays: Stay[]
   onSave: (input: StayEditInput) => Promise<void>
 }) {
@@ -465,6 +477,24 @@ export function ExpenseForm({
       <SubmitRow busy={busy} error={formError} label="Записать расход" />
     </form>
   )
+}
+
+
+export function DepositTransactionForm({
+  stay, onSave,
+}: {
+  stay: Stay
+  onSave: (input: DepositTransactionInput) => Promise<void>
+}) {
+  const { errors, formError, busy, submit } = useZodForm<DepositTransactionInput>(depositTransactionSchema)
+  return <form className="form-grid" onSubmit={submit(onSave)}>
+    <p className="hint-bar field-wide">Операция по залогу для {stay.full_name}. История сохраняется отдельно от статуса.</p>
+    <Field label="Операция"><select name="kind" defaultValue="paid"><option value="paid">Залог внесён</option><option value="refunded">Залог возвращён</option><option value="applied">Залог зачтён</option></select></Field>
+    <Field label="Сумма" error={errors.amount}><input name="amount" type="number" min="1" step="1"/></Field>
+    <Field label="Дата" error={errors.occurred_on}><input name="occurred_on" type="date" defaultValue={today()}/></Field>
+    <Field label="Комментарий"><input name="note"/></Field>
+    <SubmitRow busy={busy} error={formError} label="Записать операцию" />
+  </form>
 }
 
 export function ProfileSheet({
