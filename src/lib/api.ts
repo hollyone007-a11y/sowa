@@ -446,6 +446,21 @@ export const supabaseBackend: Backend = {
     return (data ?? []) as EntityAttachment[]
   },
 
+  async uploadAttachment(entityType, entityId, file) {
+    const allowed = ['application/pdf','image/jpeg','image/png','image/webp']
+    if (!allowed.includes(file.type) || file.size <= 0 || file.size > 15 * 1024 * 1024) throw new Error('Допустимы PDF/JPG/PNG/WEBP до 15 МБ')
+    const cleanName = file.name.replace(/[^a-zA-Z0-9._-]+/g,'-').slice(-120)
+    const storagePath = `${entityType}/${entityId}/${crypto.randomUUID()}-${cleanName}`
+    const { error: uploadError } = await db().storage.from('sowa-documents').upload(storagePath,file,{ upsert:false, contentType:file.type })
+    if (uploadError) throw readable(uploadError)
+    try {
+      await this.createAttachmentMetadata({ entity_type:entityType, entity_id:entityId, file_name:file.name, storage_path:storagePath, mime_type:file.type, size_bytes:file.size })
+    } catch (cause) {
+      await db().storage.from('sowa-documents').remove([storagePath])
+      throw cause
+    }
+  },
+
   async createAttachmentMetadata(input) {
     const userId = (await db().auth.getUser()).data.user?.id
     if (!userId) throw new Error('Сессия истекла')
