@@ -558,6 +558,7 @@ export default function App() {
         <Modal title="Новый жилец" subtitle={`Период: ${title}`} onClose={() => setModal(null)} wide>
           <ResidentForm
             properties={properties}
+            agencies={agencies}
             stays={stays}
             defaultPropertyId={selectedProperty === 'all' ? undefined : selectedProperty}
             defaultMoveIn={firstDayOf(month.year, month.month)}
@@ -585,6 +586,10 @@ export default function App() {
               setModal(null)
             }}
           />
+          <div className="ledger-history">
+            <h3>История оплат</h3>
+            {workspace?.payments.filter(item => item.stay_id === modal.stay.id).map(item => <article key={item.id}><span><strong>{money(item.amount)}</strong><small>{item.paid_at.slice(0,10)} · {item.method}</small></span>{role === 'admin' && <button type="button" className="button tiny ghost danger-text" onClick={() => { if (window.confirm('Отменить эту оплату?')) void run(async () => { await backend.reversePayment(item.id,'Отменено администратором'); return 'Оплата отменена' }).then(() => setModal(null)) }}>Отменить</button>}</article>)}
+          </div>
         </Modal>
       )}
 
@@ -593,6 +598,7 @@ export default function App() {
           <StayEditForm
             stay={modal.stay}
             properties={properties}
+            agencies={agencies}
             stays={stays}
             onSave={async (input) => {
               const stay = modal.stay
@@ -614,6 +620,7 @@ export default function App() {
             setModal(null)
             await run(async () => { await backend.recordDeposit(stay.id,input); return 'Операция по залогу записана' })
           }}/>
+          <div className="ledger-history"><h3>История залога</h3>{workspace?.deposit_transactions.filter(item => item.stay_id === modal.stay.id).map(item => <article key={item.id}><span><strong>{money(item.amount)}</strong><small>{item.occurred_on} · {item.kind}</small></span><small>{item.note}</small></article>)}</div>
         </Modal>
       )}
 
