@@ -51,7 +51,8 @@
    либо вручную: откройте **SQL Editor** и выполните **все** файлы из
    `supabase/migrations` по порядку имён: сначала
    `20260727000001_initial_schema.sql`, затем
-   `20260728000002_agency_allocations.sql`.
+   `20260728000002_agency_allocations.sql` и
+   `20260728000003_agency_integrity.sql`.
 
 4. В **Authentication → Users** нажмите **Add user** и создайте свою учётную
    запись с паролем.
