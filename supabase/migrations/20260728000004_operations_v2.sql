@@ -388,6 +388,8 @@ select
   coalesce(sum(case when s.payment_method='free' then 0 else greatest(s.price-s.paid_amount,0) end),0) debt,
   pr.monthly_cost base_cost,
   coalesce((select sum(e.amount) from public.property_expenses e where e.period_id=p.id and e.property_id=pr.id and e.archived_at is null),0) expenses,
+  coalesce(sum(s.paid_amount),0)-pr.monthly_cost-
+    coalesce((select sum(e.amount) from public.property_expenses e where e.period_id=p.id and e.property_id=pr.id and e.archived_at is null),0) profit,
   coalesce(sum(case when s.payment_method='free' then 0 else s.price end),0)-pr.monthly_cost-
     coalesce((select sum(e.amount) from public.property_expenses e where e.period_id=p.id and e.property_id=pr.id and e.archived_at is null),0) operating_profit,
   coalesce(sum(s.paid_amount),0)-pr.monthly_cost-
