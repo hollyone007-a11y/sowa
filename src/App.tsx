@@ -499,7 +499,9 @@ export default function App() {
         {tab === 'agencies' && can(role, 'view_finance') && workspace && (
           <AgencyStatementsView agencies={agencies} allocations={agencyAllocations} financials={workspace.agency_financials} payments={workspace.agency_payments} inventory={workspace.inventory} properties={properties} residents={stays} role={role} periodId={workspace.period.id} monthTitle={title} defaultStart={firstDayOf(month.year, month.month)} defaultEnd={new Date(Date.UTC(month.year, month.month, 0)).toISOString().slice(0, 10)} periodClosed={periodClosed}
             onCreateAgency={async (input) => { await run(async () => { await backend.createAgency(input); return `Агентура «${input.name}» создана` }) }}
+            onUpdateAgency={async (agencyId, input) => { await run(async () => { await backend.updateAgency(agencyId,input); return 'Агентура обновлена' }) }}
             onCreateAllocation={async (periodId, input) => { await run(async () => { await backend.createAgencyAllocation(periodId, input); return 'Строка добавлена в ведомость' }) }}
+            onUpdateAllocation={async (allocationId, input) => { await run(async () => { await backend.updateAgencyAllocation(allocationId,input); return 'Строка ведомости обновлена' }) }}
             onDeleteAllocation={(allocation) => setModal({ kind: 'delete-allocation', allocation })}
             onRecordPayment={async (periodId, input) => { await run(async () => { await backend.recordAgencyPayment(periodId, input); return 'Оплата агентуры записана' }) }}
             onCopyPrevious={async () => { await run(async () => { const copied = await backend.copyAgencyPreviousMonth(month.year, month.month); return `Перенесено строк агентур: ${copied}` }) }}
