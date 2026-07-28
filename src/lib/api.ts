@@ -19,6 +19,10 @@ const db = (): SupabaseClient => {
  * Turns the raw PostgREST error into something a manager can act on.
  * RLS denials arrive as generic 42501/PGRST codes that mean nothing to a user.
  */
+function featureMissing(error: { message?: string; code?: string } | null) {
+  return error?.code === 'PGRST204' || error?.code === '42703' || error?.code === '42P01' || /does not exist|schema cache/i.test(error?.message ?? '')
+}
+
 function readable(error: { message?: string; code?: string } | null): Error {
   const message = error?.message ?? 'Неизвестная ошибка'
   if (error?.code === '42501' || /permission denied|row-level security/i.test(message)) {
@@ -124,7 +128,7 @@ export const supabaseBackend: Backend = {
   async loadWorkspace(year, month): Promise<Workspace> {
     const client = db()
     const period = await loadPeriod(year, month)
-    const [properties, stays, debtors, expenses, agencies, allocations, inventory, agencyFinancials, agencyPayments, deposits, paymentHistory] = await Promise.all([
+    let [properties, stays, debtors, expenses, agencies, allocations, inventory, agencyFinancials, agencyPayments, deposits, paymentHistory] = await Promise.all([
       client.from('property_period_summary').select('*').eq('period_id', period.id).order('name'),
       client.from('stay_details').select('*').eq('period_id', period.id).order('full_name'),
       client.rpc('historic_debt', { p_period_id: period.id }),
@@ -144,6 +148,12 @@ export const supabaseBackend: Backend = {
     ])
     if (properties.error) throw readable(properties.error)
     if (stays.error) throw readable(stays.error)
+    if (expenses.error && featureMissing(expenses.error)) {
+      expenses = await client.from('property_expenses').select('id,period_id,property_id,category,amount,description,incurred_on,properties(name)').eq('period_id',period.id).order('incurred_on',{ascending:false})
+    }
+    if (paymentHistory.error && featureMissing(paymentHistory.error)) {
+      paymentHistory = await client.from('payments').select('id,stay_id,period_id,amount,method,paid_at,note').eq('period_id',period.id).order('paid_at',{ascending:false})
+    }
     return {
       period,
       properties: (properties.data ?? []) as Property[],
@@ -184,18 +194,18 @@ export const supabaseBackend: Backend = {
   },
 
   async updateProperty(propertyId, input) {
-    const { error } = await db().from('properties').update({
-      name: input.name,
-      full_address: input.full_address,
-      contact_name: input.contact_name || null,
-      phone: input.phone || null,
-      email: input.email || null,
-      capacity: input.capacity,
-      monthly_cost: input.monthly_cost,
-      qr_auto_approve: input.qr_auto_approve,
-      application_retention_days: input.application_retention_days,
+    const payload = {
+      name: input.name, full_address: input.full_address,
+      contact_name: input.contact_name || null, phone: input.phone || null,
+      email: input.email || null, capacity: input.capacity, monthly_cost: input.monthly_cost,
+      qr_auto_approve: input.qr_auto_approve, application_retention_days: input.application_retention_days,
       updated_at: new Date().toISOString(),
-    }).eq('id', propertyId)
+    }
+    let { error } = await db().from('properties').update(payload).eq('id', propertyId)
+    if (error && featureMissing(error)) {
+      const { qr_auto_approve: _auto, application_retention_days: _retention, ...legacy } = payload
+      ;({ error } = await db().from('properties').update(legacy).eq('id',propertyId))
+    }
     if (error) throw readable(error)
   },
 
@@ -220,9 +230,9 @@ export const supabaseBackend: Backend = {
       p_comment: input.comment || null,
     })
     if (error) throw readable(error)
-    if (data) {
-      const { error: agencyError } = await db().from('stays').update({ agency_id: input.agency_id || null }).eq('period_id', periodId).eq('person_id', String(data))
-      if (agencyError) throw readable(agencyError)
+    if (data && input.agency_id) {
+      const { error: agencyError } = await db().from('stays').update({ agency_id: input.agency_id }).eq('period_id', periodId).eq('person_id', String(data))
+      if (agencyError && !featureMissing(agencyError)) throw readable(agencyError)
     }
   },
 
@@ -240,7 +250,7 @@ export const supabaseBackend: Backend = {
     })
     if (error) throw readable(error)
     const { error: agencyError } = await db().from('stays').update({ agency_id: input.agency_id || null }).eq('id', stayId)
-    if (agencyError) throw readable(agencyError)
+    if (agencyError && !featureMissing(agencyError)) throw readable(agencyError)
   },
 
   async recordPayment(stayId, amount) {
