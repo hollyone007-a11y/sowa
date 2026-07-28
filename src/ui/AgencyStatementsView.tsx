@@ -1,23 +1,25 @@
 import { useMemo, useState } from 'react'
-import { Building2, Download, FileText, Plus, Printer, Trash2, UsersRound } from 'lucide-react'
-import { agencyAllocationSchema, agencySchema } from '../lib/schemas'
+import { Building2, Copy, Download, FileText, Plus, Printer, Trash2, UsersRound, WalletCards } from 'lucide-react'
+import { agencyAllocationSchema, agencyPaymentSchema, agencySchema } from '../lib/schemas'
 import { downloadAgencyStatementCsv } from '../lib/csv'
 import { formatDate, money } from '../lib/format'
 import { can } from '../lib/permissions'
 import { useZodForm } from './useZodForm'
-import type { Agency, AgencyAllocation, AppRole, Property } from '../types'
-import type { AgencyAllocationInput, AgencyInput } from '../lib/schemas'
+import type { Agency, AgencyAllocation, AgencyFinancialSummary, AgencyPayment, AppRole, Property } from '../types'
+import type { AgencyAllocationInput, AgencyInput, AgencyPaymentInput } from '../lib/schemas'
 
 function ErrorText({ value }: { value?: string }) {
   return value ? <small className="field-error">{value}</small> : null
 }
 
 export function AgencyStatementsView({
-  agencies, allocations, properties, role, periodId, monthTitle, defaultStart, defaultEnd,
-  periodClosed, onCreateAgency, onCreateAllocation, onDeleteAllocation,
+  agencies, allocations, financials, payments, properties, role, periodId, monthTitle, defaultStart, defaultEnd,
+  periodClosed, onCreateAgency, onCreateAllocation, onDeleteAllocation, onRecordPayment, onCopyPrevious,
 }: {
   agencies: Agency[]
   allocations: AgencyAllocation[]
+  financials: AgencyFinancialSummary[]
+  payments: AgencyPayment[]
   properties: Property[]
   role: AppRole
   periodId: string
@@ -28,18 +30,24 @@ export function AgencyStatementsView({
   onCreateAgency: (input: AgencyInput) => Promise<void>
   onCreateAllocation: (periodId: string, input: AgencyAllocationInput) => Promise<void>
   onDeleteAllocation: (allocation: AgencyAllocation) => void
+  onRecordPayment: (periodId: string, input: AgencyPaymentInput) => Promise<void>
+  onCopyPrevious: () => Promise<void>
 }) {
   const [agencyId, setAgencyId] = useState(agencies[0]?.id ?? 'all')
   const [showAgencyForm, setShowAgencyForm] = useState(false)
   const [showAllocationForm, setShowAllocationForm] = useState(false)
+  const [showPaymentForm, setShowPaymentForm] = useState(false)
   const agencyForm = useZodForm(agencySchema)
   const allocationForm = useZodForm(agencyAllocationSchema)
+  const paymentForm = useZodForm(agencyPaymentSchema)
 
   const rows = useMemo(
     () => allocations.filter((item) => agencyId === 'all' || item.agency_id === agencyId),
     [allocations, agencyId],
   )
   const selectedAgency = agencies.find((item) => item.id === agencyId)
+  const selectedFinancial = financials.find((item) => item.agency_id === agencyId)
+  const selectedPayments = payments.filter((item) => item.agency_id === agencyId)
   const total = rows.reduce((sum, item) => sum + Number(item.total_amount), 0)
   const people = rows.reduce((sum, item) => sum + item.people_count, 0)
 
@@ -60,6 +68,8 @@ export function AgencyStatementsView({
         </select>
         {can(role, 'manage_properties') && !periodClosed && <>
           <button className="button ghost" type="button" onClick={() => setShowAgencyForm((value) => !value)}><Building2 size={17} /> Агентура</button>
+          <button className="button ghost" type="button" onClick={() => void onCopyPrevious()}><Copy size={17} /> Прошлый месяц</button>
+          <button className="button ghost" type="button" onClick={() => setShowPaymentForm((value) => !value)} disabled={agencyId === 'all'}><WalletCards size={17} /> Оплата</button>
           <button className="button primary" type="button" onClick={() => setShowAllocationForm((value) => !value)} disabled={!agencies.length || !properties.length}><Plus size={17} /> Строка аренды</button>
         </>}
       </div>
@@ -96,6 +106,27 @@ export function AgencyStatementsView({
       {allocationForm.formError && <p className="form-error">{allocationForm.formError}</p>}
       <button className="button primary" disabled={allocationForm.busy}>Добавить в ведомость</button>
     </form>}
+
+
+    {showPaymentForm && selectedAgency && <form className="panel agency-editor no-print" onSubmit={paymentForm.submit(async input => { await onRecordPayment(periodId,input); setShowPaymentForm(false) })}>
+      <header className="panel-head"><div><h2>Оплата от {selectedAgency.name}</h2><p>Платёж уменьшает долг агентуры за выбранный месяц.</p></div></header>
+      <div className="form-grid four">
+        <input type="hidden" name="agency_id" value={selectedAgency.id}/>
+        <label>Сумма, Kč<input name="amount" type="number" min="1" step="1"/></label>
+        <label>Дата<input name="paid_on" type="date" defaultValue={defaultEnd}/></label>
+        <label>Способ<select name="method" defaultValue="bank"><option value="bank">Банк</option><option value="cash">Наличные</option><option value="salary">Удержание</option><option value="other">Другое</option></select></label>
+        <label>Комментарий<input name="note"/></label>
+      </div>
+      {paymentForm.formError && <p className="form-error">{paymentForm.formError}</p>}
+      <button className="button primary" disabled={paymentForm.busy}>Записать оплату</button>
+    </form>}
+
+    {selectedFinancial && <section className="agency-finance-strip">
+      <span><small>Начислено</small><strong>{money(selectedFinancial.billed)}</strong></span>
+      <span><small>Оплачено</small><strong>{money(selectedFinancial.paid)}</strong></span>
+      <span><small>Долг</small><strong>{money(selectedFinancial.debt)}</strong></span>
+      <span><small>Платежей</small><strong>{selectedPayments.length}</strong></span>
+    </section>}
 
     <section className="statement-sheet">
       <header className="statement-head">
