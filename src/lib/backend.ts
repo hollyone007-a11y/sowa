@@ -29,6 +29,7 @@ export interface Backend {
   createResident(periodId: string, input: ResidentInput): Promise<void>
   updateStay(stayId: string, input: StayEditInput): Promise<void>
   recordPayment(stayId: string, amount: number): Promise<void>
+  reversePayment(paymentId: string, reason?: string): Promise<void>
   copyPreviousMonth(year: number, month: number, excludeDeparted: boolean): Promise<number>
   getPrivateProfile(personId: string): Promise<ResidentPrivateProfile>
   deleteStay(stayId: string): Promise<void>
