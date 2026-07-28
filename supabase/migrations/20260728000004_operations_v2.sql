@@ -471,3 +471,57 @@ begin
   ) then raise exception 'housing space is already allocated in this period'; end if;
   new.updated_at:=now(); return new;
 end; $$;
+
+
+create or replace function public.submit_housing_application(
+  p_token uuid,p_first_name text,p_last_name text,p_phone text,p_workplace text,
+  p_passport_series text,p_passport_number text,p_ukraine_registration text,
+  p_requested_move_in date,p_consent boolean,p_website text default null
+) returns uuid language plpgsql security definer set search_path=public as $$
+declare target_property public.properties; new_application_id uuid; new_person_id uuid; target_period_id uuid; occupied_count integer;
+begin
+  if coalesce(trim(p_website),'')<>'' then raise exception 'invalid submission'; end if;
+  if not p_consent then raise exception 'consent required'; end if;
+  if p_requested_move_in<current_date-7 or p_requested_move_in>current_date+365 then raise exception 'invalid move-in date'; end if;
+
+  select property.* into target_property from public.property_links link
+  join public.properties property on property.id=link.property_id
+  where link.public_token=p_token and link.is_active and property.status='active';
+  if target_property.id is null then raise exception 'link unavailable'; end if;
+
+  if exists(select 1 from public.housing_applications
+    where regexp_replace(upper(passport_number),'[^A-ZА-Я0-9]','','g')=
+          regexp_replace(upper(trim(p_passport_number)),'[^A-ZА-Я0-9]','','g')
+      and created_at>now()-interval '30 days')
+    or exists(select 1 from public.resident_profiles_private
+      where regexp_replace(upper(passport_number),'[^A-ZА-Я0-9]','','g')=
+            regexp_replace(upper(trim(p_passport_number)),'[^A-ZА-Я0-9]','','g'))
+  then raise exception 'application already submitted'; end if;
+
+  insert into public.housing_applications(property_id,first_name,last_name,phone,workplace,passport_series,passport_number,ukraine_registration,requested_move_in,consent_at)
+  values(target_property.id,trim(p_first_name),trim(p_last_name),trim(p_phone),nullif(trim(p_workplace),''),
+    nullif(trim(p_passport_series),''),trim(p_passport_number),trim(p_ukraine_registration),p_requested_move_in,now())
+  returning id into new_application_id;
+
+  if target_property.qr_auto_approve then
+    insert into public.periods(year,month) values(extract(year from p_requested_move_in)::integer,extract(month from p_requested_move_in)::integer)
+    on conflict(year,month) do update set year=excluded.year returning id into target_period_id;
+
+    select count(*) into occupied_count from public.stays
+    where period_id=target_period_id and property_id=target_property.id and move_out is null and archived_at is null;
+    if occupied_count<target_property.capacity then
+      insert into public.people(first_name,last_name,phone,workplace,kind)
+      values(trim(p_first_name),trim(p_last_name),trim(p_phone),nullif(trim(p_workplace),''),'external')
+      returning id into new_person_id;
+      insert into public.resident_profiles_private(person_id,first_name,last_name,passport_series,passport_number,ukraine_registration)
+      values(new_person_id,trim(p_first_name),trim(p_last_name),nullif(trim(p_passport_series),''),trim(p_passport_number),trim(p_ukraine_registration));
+      insert into public.stays(period_id,person_id,property_id,move_in,price,payment_method,payment_status,deposit_status,comment)
+      values(target_period_id,new_person_id,target_property.id,p_requested_move_in,0,'free','tracking','none','Автоматически добавлен через QR; требуется назначить место и цену');
+      update public.housing_applications set status='approved',person_id=new_person_id,reviewed_at=now()
+      where id=new_application_id;
+    end if;
+  end if;
+  return new_application_id;
+end; $$;
+
+grant execute on function public.submit_housing_application(uuid,text,text,text,text,text,text,text,date,boolean,text) to anon,authenticated;
