@@ -15,12 +15,14 @@ const stay: Stay = {
   person_kind: 'employee', property_name: 'Praha 4', room_name: 'Комната 3', bed_name: 'Место B',
   move_in: '2026-08-01', move_out: null, price: 6500, paid_amount: 0,
   payment_method: 'salary', payment_status: 'unpaid', deposit_status: 'none', comment: null,
+  agency_id: null, agency_name: null,
 }
 
 const property: Property = {
   id: 'property-1', name: 'Praha 4', full_address: 'Komořanská 42', contact_name: null,
   phone: null, email: null, capacity: 4, monthly_cost: 20000, status: 'active',
-  public_token: null, occupied: 0, debt: 0, collected: 0,
+  public_token: null, qr_auto_approve: false, application_retention_days: 90,
+  occupied: 0, debt: 0, collected: 0,
 }
 
 describe('валидация форм', () => {
