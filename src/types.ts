@@ -165,6 +165,37 @@ export interface ResidentPrivateProfile {
   ukraine_registration: string | null
 }
 
+export interface Room {
+  id: string
+  property_id: string
+  name: string
+  capacity: number
+}
+
+export interface Bed {
+  id: string
+  room_id: string
+  name: string
+  is_active: boolean
+}
+
+export interface InventorySlot {
+  period_id: string
+  property_id: string
+  property_name: string
+  full_address: string
+  room_id: string | null
+  room_name: string | null
+  room_capacity: number | null
+  bed_id: string | null
+  bed_name: string | null
+  bed_active: boolean | null
+  stay_id: string | null
+  resident_name: string | null
+  agency_id: string | null
+  agency_name: string | null
+}
+
 export interface Agency {
   id: string
   name: string
