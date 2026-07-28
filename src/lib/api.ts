@@ -2,10 +2,11 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { getClient } from './supabase'
 import type { Backend } from './backend'
 import type {
-  Agency, AgencyAllocation, AppRole, AuthUser, Debtor, Expense, HousingApplication, Period, Property,
-  PublicProperty, ResidentPrivateProfile, Stay, Workspace,
+  Agency, AgencyAllocation, AgencyFinancialSummary, AgencyPayment, AppProfile, AppRole, AuditEntry,
+  AuthUser, Debtor, DepositTransaction, EntityAttachment, Expense, HousingApplication, InventorySlot,
+  Period, Property, PublicProperty, ResidentPrivateProfile, Stay, Workspace,
 } from '../types'
-import type { ApprovalInput, ExpenseInput, PublicApplicationInput, ResidentInput, StayEditInput } from './schemas'
+import type { AgencyPaymentInput, ApprovalInput, BedInput, DepositTransactionInput, ExpenseInput, PublicApplicationInput, ResidentInput, RoomInput, StayEditInput } from './schemas'
 import { shiftMonth } from './format'
 
 const db = (): SupabaseClient => {
@@ -28,6 +29,7 @@ function readable(error: { message?: string; code?: string } | null): Error {
   if (/housing space is already allocated/i.test(message)) return new Error('Это жильё уже закреплено за другой агентурой в выбранном месяце')
   if (/allocation dates are outside/i.test(message)) return new Error('Даты аренды не входят в выбранный месяц')
   if (/invalid payment amount/i.test(message)) return new Error('Некорректная сумма оплаты')
+  if (/capacity exceeded|duplicate key.*active_bed/i.test(message)) return new Error('Выбранная комната или место уже заполнены')
   if (/Failed to fetch|NetworkError/i.test(message)) return new Error('Нет связи с сервером')
   return new Error(message)
 }
@@ -122,7 +124,7 @@ export const supabaseBackend: Backend = {
   async loadWorkspace(year, month): Promise<Workspace> {
     const client = db()
     const period = await loadPeriod(year, month)
-    const [properties, stays, debtors, expenses, agencies, allocations] = await Promise.all([
+    const [properties, stays, debtors, expenses, agencies, allocations, inventory, agencyFinancials, agencyPayments, deposits] = await Promise.all([
       client.from('property_period_summary').select('*').eq('period_id', period.id).order('name'),
       client.from('stay_details').select('*').eq('period_id', period.id).order('full_name'),
       client.rpc('historic_debt', { p_period_id: period.id }),
@@ -130,9 +132,14 @@ export const supabaseBackend: Backend = {
         .from('property_expenses')
         .select('id,period_id,property_id,category,amount,description,incurred_on,properties(name)')
         .eq('period_id', period.id)
+        .is('archived_at', null)
         .order('incurred_on', { ascending: false }),
       client.from('agencies').select('*').eq('status', 'active').order('name'),
       client.from('agency_statement_rows').select('*').eq('period_id', period.id).order('full_address'),
+      client.from('inventory_status').select('*').eq('period_id', period.id).order('property_name').order('room_name').order('bed_name'),
+      client.from('agency_financial_summary').select('*').eq('period_id', period.id).order('agency_name'),
+      client.from('agency_payments').select('id,period_id,agency_id,amount,paid_on,method,note').eq('period_id', period.id).is('archived_at', null).order('paid_on', { ascending: false }),
+      client.from('deposit_transactions').select('id,stay_id,period_id,kind,amount,occurred_on,note').eq('period_id', period.id).order('occurred_on', { ascending: false }),
     ])
     if (properties.error) throw readable(properties.error)
     if (stays.error) throw readable(stays.error)
@@ -146,13 +153,17 @@ export const supabaseBackend: Backend = {
       expenses: expenses.error ? [] : toExpenses(expenses.data),
       agencies: agencies.error ? [] : ((agencies.data ?? []) as Agency[]),
       agency_allocations: allocations.error ? [] : ((allocations.data ?? []) as AgencyAllocation[]),
+      inventory: inventory.error ? [] : ((inventory.data ?? []) as InventorySlot[]),
+      agency_financials: agencyFinancials.error ? [] : ((agencyFinancials.data ?? []) as AgencyFinancialSummary[]),
+      agency_payments: agencyPayments.error ? [] : ((agencyPayments.data ?? []) as AgencyPayment[]),
+      deposit_transactions: deposits.error ? [] : ((deposits.data ?? []) as DepositTransaction[]),
     }
   },
 
   async createProperty(input) {
     // Creating the address and its public QR link is one operation, so an
     // address can never exist without a way to reach its application form.
-    const { error } = await db().rpc('create_property_with_link', {
+    const { data, error } = await db().rpc('create_property_with_link', {
       p_name: input.name,
       p_full_address: input.full_address,
       p_contact_name: input.contact_name || null,
@@ -162,6 +173,12 @@ export const supabaseBackend: Backend = {
       p_monthly_cost: input.monthly_cost,
     })
     if (error) throw readable(error)
+    const created = Array.isArray(data) ? data[0] : data
+    const propertyId = (created as { property_id?: string } | null)?.property_id
+    if (propertyId) {
+      const { error: settingsError } = await db().from('properties').update({ qr_auto_approve: input.qr_auto_approve, application_retention_days: input.application_retention_days }).eq('id', propertyId)
+      if (settingsError) throw readable(settingsError)
+    }
   },
 
   async updateProperty(propertyId, input) {
@@ -173,13 +190,15 @@ export const supabaseBackend: Backend = {
       email: input.email || null,
       capacity: input.capacity,
       monthly_cost: input.monthly_cost,
+      qr_auto_approve: input.qr_auto_approve,
+      application_retention_days: input.application_retention_days,
       updated_at: new Date().toISOString(),
     }).eq('id', propertyId)
     if (error) throw readable(error)
   },
 
   async createResident(periodId, input: ResidentInput) {
-    const { error } = await db().rpc('create_resident_with_stay', {
+    const { data, error } = await db().rpc('create_resident_with_stay', {
       p_period_id: periodId,
       p_first_name: input.first_name,
       p_last_name: input.last_name,
@@ -199,6 +218,10 @@ export const supabaseBackend: Backend = {
       p_comment: input.comment || null,
     })
     if (error) throw readable(error)
+    if (data) {
+      const { error: agencyError } = await db().from('stays').update({ agency_id: input.agency_id || null }).eq('period_id', periodId).eq('person_id', String(data))
+      if (agencyError) throw readable(agencyError)
+    }
   },
 
   async updateStay(stayId, input: StayEditInput) {
@@ -214,6 +237,8 @@ export const supabaseBackend: Backend = {
       p_comment: input.comment || null,
     })
     if (error) throw readable(error)
+    const { error: agencyError } = await db().from('stays').update({ agency_id: input.agency_id || null }).eq('id', stayId)
+    if (agencyError) throw readable(agencyError)
   },
 
   async recordPayment(stayId, amount) {
@@ -247,7 +272,22 @@ export const supabaseBackend: Backend = {
   },
 
   async deleteStay(stayId) {
-    const { error } = await db().from('stays').delete().eq('id', stayId)
+    const { error } = await db().rpc('archive_stay', { p_stay_id: stayId })
+    if (error) throw readable(error)
+  },
+
+  async createRoom(input: RoomInput) {
+    const { error } = await db().from('rooms').insert(input)
+    if (error) throw readable(error)
+  },
+
+  async createBed(input: BedInput) {
+    const { error } = await db().from('beds').insert({ ...input, is_active: true })
+    if (error) throw readable(error)
+  },
+
+  async recordDeposit(stayId, input: DepositTransactionInput) {
+    const { error } = await db().rpc('record_deposit_transaction', { p_stay_id: stayId, p_kind: input.kind, p_amount: input.amount, p_occurred_on: input.occurred_on, p_note: input.note || null })
     if (error) throw readable(error)
   },
 
@@ -338,7 +378,7 @@ export const supabaseBackend: Backend = {
   },
 
   async deleteExpense(expenseId) {
-    const { error } = await db().from('property_expenses').delete().eq('id', expenseId)
+    const { error } = await db().rpc('archive_expense', { p_expense_id: expenseId })
     if (error) throw readable(error)
   },
 
@@ -348,12 +388,61 @@ export const supabaseBackend: Backend = {
   },
 
   async createAgencyAllocation(periodId, input) {
-    const { error } = await db().from('agency_allocations').insert({ period_id: periodId, agency_id: input.agency_id, property_id: input.property_id, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, note: input.note || null, created_by: (await db().auth.getUser()).data.user?.id ?? null })
+    const { error } = await db().from('agency_allocations').insert({ period_id: periodId, agency_id: input.agency_id, property_id: input.property_id, room_id: input.room_id || null, bed_id: input.bed_id || null, room_name: input.room_name || null, bed_name: input.bed_name || null, people_count: input.people_count, pricing_model: input.pricing_model, unit_price: input.unit_price, start_date: input.start_date, end_date: input.end_date, note: input.note || null, created_by: (await db().auth.getUser()).data.user?.id ?? null })
     if (error) throw readable(error)
   },
 
   async deleteAgencyAllocation(allocationId) {
-    const { error } = await db().from('agency_allocations').delete().eq('id', allocationId)
+    const { error } = await db().rpc('archive_agency_allocation', { p_allocation_id: allocationId })
+    if (error) throw readable(error)
+  },
+
+  async recordAgencyPayment(periodId, input: AgencyPaymentInput) {
+    const { error } = await db().rpc('record_agency_payment', { p_period_id: periodId, p_agency_id: input.agency_id, p_amount: input.amount, p_paid_on: input.paid_on, p_method: input.method, p_note: input.note || null })
+    if (error) throw readable(error)
+  },
+
+  async copyAgencyPreviousMonth(year, month) {
+    const previous = shiftMonth(year, month, -1)
+    const [source, target] = await Promise.all([loadPeriod(previous.year, previous.month), loadPeriod(year, month)])
+    const { data, error } = await db().rpc('copy_agency_allocations', { p_source_period_id: source.id, p_target_period_id: target.id })
+    if (error) throw readable(error)
+    return Number(data ?? 0)
+  },
+
+  async listProfiles() {
+    const { data, error } = await db().from('profiles').select('id,display_name,role').order('display_name')
+    if (error) throw readable(error)
+    return (data ?? []) as AppProfile[]
+  },
+
+  async updateUserRole(userId, role) {
+    const { error } = await db().rpc('set_user_role', { p_user_id: userId, p_role: role })
+    if (error) throw readable(error)
+  },
+
+  async listAudit(limit = 200) {
+    const { data, error } = await db().from('audit_log').select('*').order('changed_at', { ascending: false }).limit(limit)
+    if (error) throw readable(error)
+    return (data ?? []) as AuditEntry[]
+  },
+
+  async purgeExpiredApplications() {
+    const { data, error } = await db().rpc('purge_expired_applications')
+    if (error) throw readable(error)
+    return Number(data ?? 0)
+  },
+
+  async listAttachments(entityType, entityId) {
+    const { data, error } = await db().from('entity_attachments').select('*').eq('entity_type', entityType).eq('entity_id', entityId).is('archived_at', null).order('created_at', { ascending: false })
+    if (error) throw readable(error)
+    return (data ?? []) as EntityAttachment[]
+  },
+
+  async createAttachmentMetadata(input) {
+    const userId = (await db().auth.getUser()).data.user?.id
+    if (!userId) throw new Error('Сессия истекла')
+    const { error } = await db().from('entity_attachments').insert({ ...input, uploaded_by: userId })
     if (error) throw readable(error)
   },
 }
