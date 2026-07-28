@@ -663,5 +663,6 @@ export function createFakeBackend(): FakeBackend {
     async listAttachments() { return [] },
     async createAttachmentMetadata() {},
     async uploadAttachment() {},
+    async getAttachmentUrl() { return '#' },
   }
 }
