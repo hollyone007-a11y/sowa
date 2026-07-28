@@ -336,3 +336,66 @@ create trigger deposit_transactions_audit after insert or update or delete on pu
 for each row execute function public.audit_changes();
 create trigger entity_attachments_audit after insert or update or delete on public.entity_attachments
 for each row execute function public.audit_changes();
+
+
+-- Replace existing read models so archived records disappear and v2 fields are
+-- available without additional round trips.
+create or replace view public.stay_details
+with (security_invoker = true)
+as
+select
+  s.id, s.period_id, s.person_id, s.property_id, s.room_id, s.bed_id,
+  concat_ws(' ', pe.first_name, pe.last_name) as full_name,
+  pe.phone, pe.workplace, pe.kind as person_kind,
+  pr.name as property_name, r.name as room_name, b.name as bed_name,
+  s.move_in, s.move_out, s.price, s.paid_amount, s.payment_method,
+  s.payment_status, s.deposit_status, s.comment,
+  s.agency_id, agency.name as agency_name
+from public.stays s
+join public.people pe on pe.id = s.person_id
+left join public.properties pr on pr.id = s.property_id
+left join public.rooms r on r.id = s.room_id
+left join public.beds b on b.id = s.bed_id
+left join public.agencies agency on agency.id = s.agency_id
+where s.archived_at is null;
+
+create or replace view public.property_period_summary
+with (security_invoker = true)
+as
+select
+  p.id as period_id,
+  pr.id, pr.name, pr.full_address, pr.contact_name, pr.phone, pr.email,
+  pr.capacity, pr.monthly_cost, pr.status,
+  count(s.id) filter (where s.move_out is null)::integer as occupied,
+  coalesce(sum(case when s.payment_method = 'free' then 0 else greatest(s.price-s.paid_amount,0) end),0)::numeric as debt,
+  coalesce(sum(s.paid_amount),0)::numeric as collected,
+  link.public_token,
+  pr.qr_auto_approve,
+  pr.application_retention_days
+from public.periods p
+cross join public.properties pr
+left join public.stays s on s.period_id=p.id and s.property_id=pr.id and s.archived_at is null
+left join public.property_links link on link.property_id=pr.id and link.is_active
+group by p.id,pr.id,link.public_token;
+
+create or replace view public.property_financial_summary
+with (security_invoker = true)
+as
+select
+  p.id period_id, pr.id property_id, pr.name property_name,
+  coalesce(sum(case when s.payment_method='free' then 0 else s.price end),0) charged,
+  coalesce(sum(s.paid_amount),0) collected,
+  coalesce(sum(case when s.payment_method='free' then 0 else greatest(s.price-s.paid_amount,0) end),0) debt,
+  pr.monthly_cost base_cost,
+  coalesce((select sum(e.amount) from public.property_expenses e where e.period_id=p.id and e.property_id=pr.id and e.archived_at is null),0) expenses,
+  coalesce(sum(case when s.payment_method='free' then 0 else s.price end),0)-pr.monthly_cost-
+    coalesce((select sum(e.amount) from public.property_expenses e where e.period_id=p.id and e.property_id=pr.id and e.archived_at is null),0) operating_profit,
+  coalesce(sum(s.paid_amount),0)-pr.monthly_cost-
+    coalesce((select sum(e.amount) from public.property_expenses e where e.period_id=p.id and e.property_id=pr.id and e.archived_at is null),0) cash_flow
+from public.periods p
+cross join public.properties pr
+left join public.stays s on s.period_id=p.id and s.property_id=pr.id and s.archived_at is null
+where public.has_role(array['admin','manager','accountant']::public.app_role[])
+group by p.id,pr.id;
+
+grant select on public.stay_details,public.property_period_summary,public.property_financial_summary to authenticated;
