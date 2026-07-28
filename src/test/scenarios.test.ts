@@ -259,14 +259,14 @@ describe('рабочие сценарии через контракт Backend', 
 
 describe('ведомость агентуры', () => {
   it('считает полный месяц без округления дней', () => {
-    expect(proratedAgencyTotal(2, 7500, '2026-08', null, null)).toBe(15000)
+    expect(proratedAgencyTotal(2, 7500, 'per_person', '2026-08-01', '2026-08-31', 2026, 8)).toBe(15000)
   })
 
   it('считает неполный период включительно по датам', () => {
-    expect(proratedAgencyTotal(2, 8500, '2026-07', '2026-07-27', '2026-07-31')).toBe(2742)
+    expect(proratedAgencyTotal(2, 8500, 'per_person', '2026-07-27', '2026-07-31', 2026, 7)).toBe(2742)
   })
 
   it('не переносит начисление в другой месяц', () => {
-    expect(proratedAgencyTotal(2, 7500, '2026-08', '2026-07-01', '2026-07-31')).toBe(0)
+    expect(proratedAgencyTotal(2, 7500, 'per_person', '2026-07-01', '2026-07-31', 2026, 8)).toBe(0)
   })
 })
