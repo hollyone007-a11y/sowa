@@ -51,7 +51,9 @@ export interface Backend {
   createExpense(periodId: string, input: ExpenseInput): Promise<void>
   deleteExpense(expenseId: string): Promise<void>
   createAgency(input: AgencyInput): Promise<void>
+  updateAgency(agencyId: string, input: AgencyInput): Promise<void>
   createAgencyAllocation(periodId: string, input: AgencyAllocationInput): Promise<void>
+  updateAgencyAllocation(allocationId: string, input: AgencyAllocationInput): Promise<void>
   deleteAgencyAllocation(allocationId: string): Promise<void>
   recordAgencyPayment(periodId: string, input: AgencyPaymentInput): Promise<void>
   copyAgencyPreviousMonth(year: number, month: number): Promise<number>
