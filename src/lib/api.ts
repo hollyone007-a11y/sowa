@@ -481,6 +481,12 @@ export const supabaseBackend: Backend = {
     }
   },
 
+  async getAttachmentUrl(storagePath) {
+    const { data, error } = await db().storage.from('sowa-documents').createSignedUrl(storagePath, 60)
+    if (error) throw readable(error)
+    return data.signedUrl
+  },
+
   async createAttachmentMetadata(input) {
     const userId = (await db().auth.getUser()).data.user?.id
     if (!userId) throw new Error('Сессия истекла')
