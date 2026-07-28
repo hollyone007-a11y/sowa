@@ -553,3 +553,16 @@ end; $$;
 
 grant update on public.payments to authenticated;
 grant execute on function public.reverse_payment(uuid,text) to authenticated;
+
+
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values('sowa-documents','sowa-documents',false,15728640,array['application/pdf','image/jpeg','image/png','image/webp'])
+on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
+
+create policy sowa_documents_read on storage.objects for select to authenticated
+using(bucket_id='sowa-documents' and public.has_role(array['admin','manager','accountant']::public.app_role[]));
+create policy sowa_documents_insert on storage.objects for insert to authenticated
+with check(bucket_id='sowa-documents' and public.has_role(array['admin','manager']::public.app_role[]));
+create policy sowa_documents_update on storage.objects for update to authenticated
+using(bucket_id='sowa-documents' and public.has_role(array['admin','manager']::public.app_role[]))
+with check(bucket_id='sowa-documents' and public.has_role(array['admin','manager']::public.app_role[]));
